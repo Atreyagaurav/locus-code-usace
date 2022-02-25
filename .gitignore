@@ -1,0 +1,5 @@
+data/inputs
+.DS_Store
+.vscode
+.vscode/
+.pyc
