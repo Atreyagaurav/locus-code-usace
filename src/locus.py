@@ -27,7 +27,7 @@ def clustering(m: np.ndarray):
 def cluster_means(dflabeled: pd.DataFrame, dfgrids: pd.DataFrame):
     cluster_means = dfgrids.copy(deep=True)
     n_clusters = dflabeled.cluster.max()
-    for i in range(0, n_clusters):      # loop over clusters
+    for i in range(0, n_clusters + 1):      # loop over clusters
         cluster = dflabeled[dflabeled.cluster == i]
         means = np.zeros(len(dflabeled.columns) - 1) # number of gridcells
         for j in range(0, len(means)):  # loop over grid cells

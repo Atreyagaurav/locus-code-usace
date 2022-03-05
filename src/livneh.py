@@ -174,7 +174,17 @@ def ams(outpaths: List[str], ndays: int = 1) -> pd.DataFrame:
         
     Note: Also writes out the AMS series (amsNdy.csv) and gridded event data (amsNdy_grids.csv) where N = ndays, to an 'ams' sub-directory in the outpaths directory.
     '''
-    # import all processed livneh data and get basin average precipitation data
+    
+    basin, grids = series_data(outpaths, ndays) # basin avg precip and gridded data for all yrs
+    basin['yr'] = pd.DatetimeIndex(basin['date']).year
+    series = basin[basin['p_mm'] == basin.groupby(['yr'])['p_mm'].transform(max)].reset_index() # annual max series
+    series = series.drop(columns=['index']).rename(columns={'date': 'end_date'})
+    series['start_date'] = pd.to_datetime(series.loc[:, 'end_date'].to_numpy()) - pd.to_timedelta(ndays - 1, unit='d')
+    series_grids = event_data(series, grids)
+    series.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_events.csv', index=False)
+    series_grids.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_grids.csv')
+    return series, series_grids
+    
     dfs = series_data(outpaths, ndays)
     # find ams series
     df_ams = dfs[0]
@@ -192,33 +202,53 @@ def pds(outpaths: List[str], threshold: float, ndays:int = 1):
     # import all processed livneh data and get basin average precipitation data
     dfs = series_data(outpaths, ndays)
     # find peaks over theshold series
-    df_pds = dfs[0]
+    df_pds = dfs[0].copy(deep=True)
     df_pds = df_pds[df_pds.p_mm >= threshold]
     df_pds = df_pds.rename(columns={'date': 'end_date'})
     df_pds['start_date'] = pd.to_datetime(df_pds.loc[:,'end_date'].to_numpy()) - pd.to_timedelta(ndays - 1, unit='d')
     # print pds data
-    pds_grids = event_data(df_pds, dfs[1])
+    pds_grids = event_data(df_pds, dfs[1].copy(deep=True))
     df_pds.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/pds/{str(ndays)}dy_events.csv', index=False)
     pds_grids.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/pds/{str(ndays)}dy_grids.csv')
     return df_pds, pds_grids    
-
+    
 def series_data(outpaths: List[str], ndays: int) -> pd.DataFrame:
     # import all processed livneh data
-    df_all = gpd.GeoDataFrame()
+    dfs: List[pd.DataFrame] = []
     for path in outpaths:
-        df_all = pd.read_csv(path) if df_all.empty else df_all.append(pd.read_csv(path), ignore_index=True)
-    # basin average precipitation data
-    df_basin = df_all
-    df_basin['p_mm'] = df_basin.prec.to_numpy() * df_basin.area_weight.to_numpy()
-    df_basin = df_basin[['date', 'p_mm']].groupby(['date']).sum().reset_index()
-    df_basin.p_mm = df_basin.p_mm.rolling(ndays, min_periods=1).sum()
-    return df_basin, df_all
+        dfs.append(pd.read_csv(path))
+    df = pd.concat(dfs)
+    basin = df.copy(deep = True)
+    basin['p_mm'] = basin['prec'].to_numpy() * basin['area_weight'].to_numpy()
+    basin = basin[['date', 'p_mm']].groupby(['date']).sum().reset_index().copy(deep=True)
+    basin['p_mm'] = basin['p_mm'].rolling(ndays, min_periods=1).sum()
+    return basin, df
+    
+    # df_all = gpd.GeoDataFrame()
+    # for path in outpaths:
+    #     df_all = pd.read_csv(path) if df_all.empty else df_all.append(pd.read_csv(path), ignore_index=True)
+    # # basin average precipitation data
+    # df_basin = df_all.copy(deep=True)
+    # df_basin['p_mm'] = df_basin.prec.to_numpy() * df_basin.area_weight.to_numpy()
+    # df_basin = df_basin[['date', 'p_mm']].groupby(['date']).sum().reset_index()
+    # df_basin.p_mm = df_basin.p_mm.rolling(ndays, min_periods=1).sum()
+    # return df_basin, df_all
 
-def event_data(series: pd.DataFrame, all_grids: pd.DataFrame) -> pd.DataFrame:    
-    events: List[pd.Series] = []
+def event_data(series: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:    
+    dfs: List[pd.Series] = []
+    df['date'] = pd.to_datetime(df['date'])
     for _, row in series.iterrows():
-        event_days: pd.DataFrame = all_grids[(pd.to_datetime(row.start_date) <= pd.to_datetime(all_grids.date)) & (pd.to_datetime(all_grids.date) <= pd.to_datetime(row.end_date))].sort_values(by=['id']).filter(['id', 'p_mm']).rename(columns={'p_mm': row.start_date})
-        event_days = event_days.groupby(['id']).sum().T
-        events.append(event_days)
-    series_grids = pd.DataFrame().append(events)
-    return series_grids   
+        event = df.loc[df['date'].between(pd.to_datetime(row['start_date']), pd.to_datetime(row['end_date']))]
+        #event = df[(pd.to_datetime(row['start_date']) <= pd.to_datetime(df['date'])) & (pd.to_datetime(df['date']) <= pd.to_datetime(row['end_date']))].copy(deep=True)
+        #event = event.sort_values(by = ['id']).filter(['id', 'p_mm']).rename({'p_mm': row['start_date']}).copy(deep=True)
+        event = event.sort_values(by = ['id']).filter(['id', 'prec']).rename(columns={'prec': row['start_date']}).copy(deep=True)
+        event = event.groupby(['id']).sum().T
+        dfs.append(event)
+    return pd.concat(dfs)
+    # events: List[pd.Series] = []
+    # for _, row in series.iterrows():
+    #     event_days: pd.DataFrame = all_grids[(pd.to_datetime(row.start_date) <= pd.to_datetime(all_grids.date)) & (pd.to_datetime(all_grids.date) <= pd.to_datetime(row.end_date))].sort_values(by=['id']).filter(['id', 'p_mm']).rename(columns={'p_mm': row.start_date})
+    #     event_days = event_days.groupby(['id']).sum().T
+    #     events.append(event_days)
+    # series_grids = pd.DataFrame().append(events)
+    # return series_grids   
