@@ -18,10 +18,10 @@ def dimensionality_reduction(df: pd.DataFrame):
 def clustering(m: np.ndarray):
     sse = []
     for k in range(2, 11):
-        kmeans = KMeans(n_clusters=k).fit(m[:,:4])
+        kmeans = KMeans(n_clusters=k).fit(m) #m[:,:4]
         sse.append(kmeans.inertia_)
     knee = KneeLocator(range(2, 11), sse, curve='convex', direction='decreasing').elbow
-    clusters = KMeans(n_clusters=knee).fit(m[:,:4])
+    clusters = KMeans(n_clusters=knee).fit(m) #m[:,:4]
     return clusters.labels_
 
 def cluster_means(dflabeled: pd.DataFrame, dfgrids: pd.DataFrame):
@@ -35,4 +35,11 @@ def cluster_means(dflabeled: pd.DataFrame, dfgrids: pd.DataFrame):
         cluster_means[i] = means
     return cluster_means
                  
-    
+def normalize_cluster(df: pd.DataFrame, ids: pd.DataFrame):
+    nclusters = sum([1 if type(c) is int else 0 for c in df.columns.values])
+    df.sort_values(by='id', inplace=True)
+    ids.sort_values(by='id', inplace=True)
+    for i in range(nclusters):
+        basin = sum([p*w for (p, w) in zip(df[i].to_numpy(), ids['area_weight'].to_numpy())])
+        df[f'{i}norm'] = df[i].to_numpy() / basin
+    return df
