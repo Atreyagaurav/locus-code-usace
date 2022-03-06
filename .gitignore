@@ -1,4 +1,6 @@
-data/input/waterboundary/
+data/input/waterboundary/*
+data/output/trinity/*   
+**/__pycache__
 **/__pycache__/
 *.DS_Store
 *.vscode

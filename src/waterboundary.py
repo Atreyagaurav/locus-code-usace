@@ -1,6 +1,7 @@
 from typing import List
 from dataclasses import dataclass
 from geopandas import gpd
+from pathlib import Path
 
 @dataclass
 class Waterboundary:
@@ -9,7 +10,7 @@ class Waterboundary:
     '''
     crs: str = '4326'
     code: str = '02070002'
-    path: str = '/Users/johnkucharski/Documents/source/locus/data/input/waterboundary/'
+    path: str =  '' # /Users/johnkucharski/Documents/source/locus/data/input/waterboundary/'
     
     def filepath(self) -> str:
         return f'{self.path}WBD_{self.code[0:2]}_HU2_Shape/Shape/WBDHU{len(self.code)}.shp'
