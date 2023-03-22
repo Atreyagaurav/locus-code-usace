@@ -1,8 +1,8 @@
-from datetime import timedelta
 from typing import List
-from dataclasses import dataclass
 import itertools
+import xarray
 
+import os.path
 import numpy as np
 import xarray as xr
 import pandas as pd
@@ -16,15 +16,16 @@ def inputfilepaths(directory: str, vars: List[str], yrs: List[int]) -> List[str]
     '''
     Generates a list of string file paths in the specified directory with the form <var>.<year>.nc
 
-    Args: 
-        directory (str): directory path. 
+    Args:
+        directory (str): directory path.
         vars (List[str]): list of variable identification strings (i.e. prec, tmin, tmax, etc.).
         yrs (List[int]): list of year strings in the form yyyy.
-    
-    Returns: 
+
+    Returns:
         List[str]: file paths
     '''
-    return [f'{directory}{str(v)}.{str(yr)}.nc' for yr in yrs for v in vars]
+    return [f'{directory}{v}.{yr}.nc' for yr in yrs for v in vars]
+
 
 def outputfilepaths(directory: str, filelist: List[str], extension: str = '.csv') -> List[str]:
     '''
@@ -34,158 +35,160 @@ def outputfilepaths(directory: str, filelist: List[str], extension: str = '.csv'
         directory (str): directory path.
         filelist (List[str]): list of paths to files that will be processed.
         extension (str): string output file extension, .csv by default.
-    
-    Returns: 
+
+    Returns:
         List[str]: file paths
     '''
-    return [f'{directory}{path.rsplit("/", 1)[1].rsplit(".", 1)[0]}{extension}' for path in filelist]
+    def new_path(old_path):
+        bn = os.path.basename(old_path)
+        no_ext, _ = os.path.splitext(bn)
+        return os.path.join(directory, f"{no_ext}{extension}")
 
-def process_files(inputpaths: List[str], outputpaths: List[str], boundarybox: List[int], wbd: gpd.GeoDataFrame):
+    return [new_path(path) for path in filelist]
+
+
+def process_files(inputpaths: List[str],
+                  outputpaths: List[str],
+                  boundarybox: List[int],
+                  wbd: gpd.GeoDataFrame):
     '''
     Multithreaded livneh precipitation file procesessing, returning .csv for each year
-    
+
     Args:
         inputpaths (List[str]): list string of file paths to livneh precipitation NetCDF files.
         outputpaths (List[str]): list of string file paths for the processed .csv files.
         boundarybox (List[int]): 180 degree decimal degree latitute and longitude edges creating a spatial box from which the Livneh data is extracated and processed.
         wbd (geopandas.GeoDataFrame): spatial dataframe containing the watershed polygon from which Livneh data is extracted and processed.
-    
+
     Returns:
-        Writes a string containing the processed file names. 
-    
+        Writes a string containing the processed file names.
+
     Note:
         **Also writes the processed .csv files out.
     '''
     results = []
-    df = import_file(inputpaths[0], boundarybox, wbd, geom=True)
-    ids = grid_ids_and_areas(df, wbd.iloc[0].areasqkm)
+    ids, areas = grid_ids_and_areas(inputpaths[0], boundarybox, wbd)
     pool = mp.Pool(mp.cpu_count() - 1) # leave one so that your computer doesn't freeze
-    results = pool.starmap_async(process_file, [(inputpaths[i], outputpaths[i], boundarybox, wbd, ids) for i in range(len(inputpaths))]).get()
+    results = pool.starmap_async(process_file,
+                                 [(inputpaths[i],
+                                   outputpaths[i],
+                                   ids, areas, wbd.iloc[0].areasqkm)
+                                  for i in range(len(inputpaths))]).get()
     pool.close()
-    ids.to_csv(f'{outputpaths[0].rsplit("/", 1)[0]}/ids.csv')
     return results
 
-def ids(inputpath: str, boundarybox: List[int], wbd: gpd.GeoDataFrame, crs: int = 4326):
-    df = import_file(inputpath, boundarybox, wbd)
-    df = grid_ids_and_areas(df, wbd.iloc[0].areasqkm)
-    return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat, crs=f'EPSG:{str(crs)}'))
 
-def process_file(inputpath: str, outputpath: str, bbox: List[float], wbd: gpd.GeoDataFrame, ids:gpd.GeoDataFrame) -> None:
+def process_file(inputpath: str,
+                 outputpath: str,
+                 ids,
+                 areas,
+                 wbd_area) -> None:
     '''
     Chains the import_file and grids_ids_and_areas
     '''
-    df = import_file(inputpath, boundingbox = bbox, mask = wbd)
-    print("merge")
-    df =  df.merge(ids, on=['lat', 'lon'], how='inner')
+    df = import_file(inputpath, ids, areas, wbd_area)
     print(f"to csv: {outputpath}")
-    df.to_csv(outputpath, index=False)   
-    return outputpath.rsplit('/', 1)[1]
+    df.to_csv(outputpath)
 
-def import_file(filepath: str, boundingbox: List[int], mask: gpd.GeoDataFrame, geom: bool = False)-> pd.DataFrame:
-    print("import_file")
+
+def import_file(filepath: str, ids, areas, wbd_area) -> pd.DataFrame:
     '''
     Imports a Livneh NetCDF file and returns a geopandas GeoDataFrame containing the Livneh data clipped to the mask area.
 
     Args:
         filepath (str): Livneh NetCDF string file path
-        boundingbox (List[int]): list of latitude and longitude coordinates in form [E, S, W, N] corresponding with the maximum extents of the mask.
-        mask (geopandas.GeoDataFrame): a geopandas data frame containing the region to which the Livneh data is clipped.
-        
-    Returns: 
+        wbd_area (float): the size of the watershed of interest.
+
+    Returns:
         gpd.GeoDataFrame: containing ['date', 'prec', 'lat' and 'lon'] for polygons constructed the ['lat', 'lon'] centroids of each Livneh gridcell.
+    '''
+    netCDF = xr.open_dataset(filepath)
+    netCDF["ids"] = ids
+    netCDF["area_km2"] = areas
+    netCDF["area_weight"] = areas / wbd_area
+    df = netCDF.where(netCDF.area_weight > 0, drop=True).to_dataframe()
+    df.index.names = ["date", "lat", "lon"]
+    return df.dropna()
+
+
+def grid_ids_and_areas(filepath: str, bbox: List[int], mask: gpd.GeoDataFrame):
+    '''
+    Creates a dataframe containing the gridcells geometries, areas and ids.
+
+    Args:
+        filepath (str): Livneh NetCDF string file path
+        bbox (List[int]): list of latitude and longitude coordinates in form [E, S, W, N] corresponding with the maximum extents of the mask.
+        mask (geopandas.GeoDataFrame): a geopandas data frame containing the region to which the Livneh data is clipped.
+
+    Returns:
+        tuple of ids and areas
     '''
     #Import NetCDF file as XArray data
     netCDF = xr.open_dataset(filepath)
-    print("read nc")
-    if boundingbox is not None:
-        # bounding box is based on 180 longitudes
-        # livneh data is based on 360 degree longitude   
-        netCDF = netCDF \
-        .where(netCDF.lon > boundingbox[0] + 360, drop=True) \
-        .where(netCDF.lat > boundingbox[1], drop=True) \
-        .where(netCDF.lon < boundingbox[2] + 360, drop=True) \
-        .where(netCDF.lat < boundingbox[3], drop=True)
-    print("filter")
-    df: pd.DataFrame = netCDF.to_dataframe().reset_index()
-    df['date'] = pd.to_datetime(df.time)
-    df.drop(columns=['time'], inplace = True)
-    
-    print("dataframe")
-    # Geometry (fix lon, make polygons from centroid lats and lons, geopandas)
-    df.lon = df.lon.apply(lambda x: x - 360)
-    if not geom:
-        return df
-    global clipped
-    if clipped.empty:
-        # temporary fix to not have it do all this processing for each file. since I assume they use the same grid.
-        latlon = pd.Series(itertools.product(df.lat.unique(), df.lon.unique()))
-        lat, lon, shift = latlon.map(lambda ll: ll[0]).to_numpy(), latlon.map(lambda ll: ll[1]).to_numpy(), 1/32
-        n, s, e, w = lat + shift, lat - shift, lon + shift, lon - shift
-        print("geometry calc")
-        geometry = [Polygon(zip([w[i], e[i], e[i], w[i]], [n[i], n[i], s[i], s[i]])) for i in range(len(lat))]
-        print("geometry made")
-        # clip takes a lot of time, you can simplify geometries or reduce
-        # the number of entries to clip, this is extensive, the grid is
-        # the same for all 365 days, you don't have to calculate the
-        # weights for all,
-        geom_unclip = gpd.GeoDataFrame(index=latlon, geometry=geometry, crs=mask.crs)
-        geom_unclip.set_geometry("geometry", inplace=True)
-        clipped = gpd.clip(geom_unclip, mask, keep_geom_type=False)
-        print("done clipping")
-    # this lookup is not supposed to be expensive but it is
-    # filter .loc[df.date == df.date[0],:] for coeffs only
-    geometry = df.apply(lambda r: clipped.geometry.get((r.lat, r.lon)), axis=1)
-    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs=mask.crs)
-    return gdf.dropna()
 
-clipped = gpd.GeoDataFrame()
+    if bbox is not None:
+        # b box is based on 180 longitudes
+        # livneh data is based on 360 degree longitude
+        lats = list(filter(lambda il: il[1] > bbox[1] and il[1] < bbox[3],
+                           enumerate(netCDF.lat.to_numpy())))
+        lons = list(filter(lambda il: il[1] > bbox[0] and il[1] < bbox[2],
+                           enumerate(netCDF.lon.to_numpy() - 360)))
+        lats_ind = [i for i, l in lats]
+        lons_ind = [i for i, l in lons]
+        lats = [l for i, l in lats]
+        lons = [l for i, l in lons]
+    else:
+        lats = netCDF.lats.to_list()
+        lons = netCDF.lons.to_list()
+        # Geometry (fix lon, make polygons from centroid lats and lons, geopandas)
+    # temporary fix to not have it do all this processing for each
+    # file. since I assume they use the same grid.
+    latlon = pd.Series(itertools.product(lats, lons))
+    lat = latlon.map(lambda ll: ll[0]).to_numpy()
+    lon = latlon.map(lambda ll: ll[1]).to_numpy()
+    shift = 1/32
+    n, s, e, w = lat + shift, lat - shift, lon + shift, lon - shift
+    geometry = [Polygon(zip([w[i], e[i], e[i], w[i]],
+                            [n[i], n[i], s[i], s[i]]))
+                for i in range(len(lat))]
+    geom_unclip = gpd.GeoDataFrame(
+        index=itertools.product(lats_ind, lons_ind),
+        geometry=geometry, crs=mask.crs)
+    geom_unclip.set_geometry("geometry", inplace=True)
+    clipped = gpd.clip(geom_unclip,
+                       mask,
+                       keep_geom_type=False).to_crs("EPSG:3857")
+    area = clipped.geometry.map(lambda g: g.area / 1_000_000)
+    areas = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"))
+    ids = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"))
+    i = 0
+    for ll, a in area.iteritems():
+        areas[ll] = a
+        ids[ll] = i
+        i += 1
+    return ids, areas
 
-def grid_ids_and_areas(df: gpd.GeoDataFrame, wbd_area: float):
-    print("grid_ids_and_areas")
-    '''
-    Creates a dataframe containing the gridcells geometries, areas and ids.
-    
-    Args:
-        df (geopandas.GeoDataFrame): A geopandas dataframe containing the Livneh gridcell data of interest, clipped to a watershed boundary.
-        wbd_area (float): the size of the watershed of interest.
-        
-    Returns:
-        geopandas.GeoDataFrame containing ['id', 'lat', 'lon', 'area_km2', 'area_weight'] where 
-            * id is the gridcell id, 
-            * lat and lon are the centroid coordinates, 
-            * area_km2 is the gridcell area (clipped to the waterboundary) in sqkm, 
-            * area_weight is the portion of the watershed contained in gridcell.
-    '''
-    # don't need 365 copies, just 1 day
-    df = df[df.date == df.loc[df.index[0], 'date']].copy(deep=True)
-    df.sort_values(by=['lat', 'lon'], ascending=[False, True], inplace=True)
-    df.reset_index(inplace=True)
-    df['id'] = df.index.to_numpy()
-    df.to_crs('EPSG:3857', inplace=True)
-    df['area_km2'] = df.geometry.area.to_numpy() / 1_000_000
-    df['area_weight'] = df.area_km2.to_numpy() / wbd_area
-    #df = df.filter(['id', 'lat', 'lon', 'area_km2', 'area_weight']) 
-    return df.filter(['id', 'lat', 'lon', 'area_km2', 'area_weight']) 
 
 def compute_series(outpaths: List[str], ndays: List[int]):
     print("compute_series")
     '''
     Multithreaded compute for the partial duration (PDS) and annual maximum series (AMS) for a specified set of durations (in days), writes the series data out to .csv files containing: (1) the series events dates, (2) the series gridded data.
-    
+
     Args:
         outpaths (List[str]): List of string paths for the processed .csv files for each PDS or AMS.
         ndays (List[int]): List of integer durations in days.
-        
+
     Returns:
         A string indicating sucess (or failure) for each duration.
-        
+
     Note:
-        **Also writes out .csv files: (1) summarizing the series events (dates, overall depth, etc.), (2) the series gridded data. 
+        **Also writes out .csv files: (1) summarizing the series events (dates, overall depth, etc.), (2) the series gridded data.
     '''
     pool = mp.Pool(1)# mp.cpu_count()-1) # leave one so that your computer doesn't freeze
     results = pool.starmap_async(_ams_and_pds, [(outpaths, n) for n in ndays]).get()
     pool.close()
     return results
+
 
 def _ams_and_pds(outpaths: List[str], ndays: int):
     ams_data = ams(outpaths, ndays)
@@ -195,17 +198,17 @@ def _ams_and_pds(outpaths: List[str], ndays: int):
 def ams(outpaths: List[str], ndays: int = 1) -> pd.DataFrame:
     '''
     Computes the Annual Maximum Series from the set of processed annual livneh data files identified by outpaths.
-    
+
     Args:
         outpaths (List[str]): a list of string paths to processed annual livneh data files.
         ndays (int): the n day event window over which the AMS is computed.
-        
+
     Return:
         pandas.DataFrame: containing the AMS
-        
+
     Note: Also writes out the AMS series (amsNdy.csv) and gridded event data (amsNdy_grids.csv) where N = ndays, to an 'ams' sub-directory in the outpaths directory.
     '''
-    
+
     basin, grids = series_data(outpaths, ndays) # basin avg precip and gridded data for all yrs
     basin['yr'] = pd.DatetimeIndex(basin['date']).year
     series = basin[basin['p_mm'] == basin.groupby(['yr'])['p_mm'].transform(max)].reset_index() # annual max series
@@ -215,19 +218,21 @@ def ams(outpaths: List[str], ndays: int = 1) -> pd.DataFrame:
     series.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_events.csv', index=False)
     series_grids.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_grids.csv')
     return series, series_grids
-    
+
+
     dfs = series_data(outpaths, ndays)
     # find ams series
     df_ams = dfs[0]
     df_ams['yr'] = pd.DatetimeIndex(df_ams.date).year
     df_ams = df_ams[df_ams.p_mm == df_ams.groupby(['yr']).p_mm.transform(max)].reset_index()
-    df_ams = df_ams.drop(columns=['index']).rename(columns={'date': 'end_date'})    
+    df_ams = df_ams.drop(columns=['index']).rename(columns={'date': 'end_date'})
     df_ams['start_date'] = pd.to_datetime(df_ams.loc[:,'end_date'].to_numpy()) - pd.to_timedelta(ndays - 1, unit='d')
     # print ams data
     ams_grids = event_data(df_ams, dfs[1])
     df_ams.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_events.csv', index=False)
     ams_grids.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_grids.csv')
     return df_ams, ams_grids
+
 
 def pds(outpaths: List[str], threshold: float, ndays:int = 1):
     # import all processed livneh data and get basin average precipitation data
@@ -241,8 +246,9 @@ def pds(outpaths: List[str], threshold: float, ndays:int = 1):
     pds_grids = event_data(df_pds, dfs[1].copy(deep=True))
     df_pds.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/pds/{str(ndays)}dy_events.csv', index=False)
     pds_grids.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/pds/{str(ndays)}dy_grids.csv')
-    return df_pds, pds_grids    
-    
+    return df_pds, pds_grids
+
+
 def series_data(outpaths: List[str], ndays: int) -> pd.DataFrame:
     # import all processed livneh data
     dfs: List[pd.DataFrame] = []
@@ -254,7 +260,7 @@ def series_data(outpaths: List[str], ndays: int) -> pd.DataFrame:
     basin = basin[['date', 'p_mm']].groupby(['date']).sum().reset_index().copy(deep=True)
     basin['p_mm'] = basin['p_mm'].rolling(ndays, min_periods=1).sum()
     return basin, df
-    
+
     # df_all = gpd.GeoDataFrame()
     # for path in outpaths:
     #     df_all = pd.read_csv(path) if df_all.empty else df_all.append(pd.read_csv(path), ignore_index=True)
@@ -265,14 +271,15 @@ def series_data(outpaths: List[str], ndays: int) -> pd.DataFrame:
     # df_basin.p_mm = df_basin.p_mm.rolling(ndays, min_periods=1).sum()
     # return df_basin, df_all
 
-def event_data(series: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:    
+
+def event_data(series: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     dfs: List[pd.Series] = []
     df['date'] = pd.to_datetime(df['date'])
     for _, row in series.iterrows():
         event = df.loc[df['date'].between(pd.to_datetime(row['start_date']), pd.to_datetime(row['end_date']))]
         #event = df[(pd.to_datetime(row['start_date']) <= pd.to_datetime(df['date'])) & (pd.to_datetime(df['date']) <= pd.to_datetime(row['end_date']))].copy(deep=True)
         #event = event.sort_values(by = ['id']).filter(['id', 'p_mm']).rename({'p_mm': row['start_date']}).copy(deep=True)
-        event = event.sort_values(by = ['id']).filter(['id', 'prec']).rename(columns={'prec': row['start_date']}).copy(deep=True)
+        event = event.sort_values(by=['id']).filter(['id', 'prec']).rename(columns={'prec': row['start_date']}).copy(deep=True)
         event = event.groupby(['id']).sum().T
         dfs.append(event)
     return pd.concat(dfs)
@@ -282,4 +289,4 @@ def event_data(series: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     #     event_days = event_days.groupby(['id']).sum().T
     #     events.append(event_days)
     # series_grids = pd.DataFrame().append(events)
-    # return series_grids   
+    # return series_grids

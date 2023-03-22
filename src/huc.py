@@ -36,4 +36,4 @@ class HUC:
                 raise AttributeError(e)
 
     def __repr__(self):
-        return f'HUC {self.huc_code} <Area: {self.areasqkm} Sq Km>'
+        return f'{self.name} <HUC {self.huc_code}>'
