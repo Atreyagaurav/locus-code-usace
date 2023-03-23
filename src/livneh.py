@@ -68,6 +68,14 @@ def process_files(inputpaths: List[str],
     '''
     results = []
     ids, areas = grid_ids_and_areas(inputpaths[0], boundarybox, wbd)
+    temp_data = xarray.Dataset()
+    temp_data["ids"] = ids
+    temp_data["areas"] = areas
+    temp_data["weights"] = areas / wbd.iloc[0].areasqkm
+    dtf = temp_data.where(temp_data.areas > 0, drop=True).to_dataframe().dropna()
+    dtf.to_csv("./data/output/trinity/ids.csv")
+    print("Saved IDs to", "./data/output/trinity/ids.csv")
+
     pool = mp.Pool(mp.cpu_count() - 1) # leave one so that your computer doesn't freeze
     results = pool.starmap_async(process_file,
                                  [(inputpaths[i],
@@ -80,9 +88,9 @@ def process_files(inputpaths: List[str],
 
 def process_file(inputpath: str,
                  outputpath: str,
-                 ids,
-                 areas,
-                 wbd_area) -> None:
+                 ids: xarray.Dataset,
+                 areas: xarray.Dataset,
+                 wbd_area: float) -> None:
     '''
     Chains the import_file and grids_ids_and_areas
     '''
@@ -91,19 +99,24 @@ def process_file(inputpath: str,
     df.to_csv(outputpath)
 
 
-def import_file(filepath: str, ids, areas, wbd_area) -> pd.DataFrame:
+def import_file(filepath: str,
+                ids: xarray.Dataset,
+                areas: xarray.Dataset,
+                wbd_area: float) -> pd.DataFrame:
     '''
     Imports a Livneh NetCDF file and returns a geopandas GeoDataFrame containing the Livneh data clipped to the mask area.
 
     Args:
         filepath (str): Livneh NetCDF string file path
-        wbd_area (float): the size of the watershed of interest.
+        ids (xarray.Dataset): IDs of the grids based on latitude and longitude
+        areas (xarray.Dataset): areas of the grids
+        wbd_area (float): the area of the watershed of interest.
 
     Returns:
         gpd.GeoDataFrame: containing ['date', 'prec', 'lat' and 'lon'] for polygons constructed the ['lat', 'lon'] centroids of each Livneh gridcell.
     '''
     netCDF = xr.open_dataset(filepath)
-    netCDF["ids"] = ids
+    NETCDF["ids"] = ids
     netCDF["area_km2"] = areas
     netCDF["area_weight"] = areas / wbd_area
     df = netCDF.where(netCDF.area_weight > 0, drop=True).to_dataframe()
@@ -160,8 +173,9 @@ def grid_ids_and_areas(filepath: str, bbox: List[int], mask: gpd.GeoDataFrame):
                        keep_geom_type=False).to_crs("EPSG:3857")
     area = clipped.geometry.map(lambda g: g.area / 1_000_000)
     areas = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"))
-    ids = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"))
-    i = 0
+    ids = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"), dtype=int)
+
+    i = 1
     for ll, a in area.iteritems():
         areas[ll] = a
         ids[ll] = i
