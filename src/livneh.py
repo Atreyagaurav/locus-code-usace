@@ -68,41 +68,32 @@ def process_files(inputpaths: List[str],
     '''
     results = []
     ids, areas = grid_ids_and_areas(inputpaths[0], boundarybox, wbd)
-    temp_data = xarray.Dataset()
-    temp_data["ids"] = ids
-    temp_data["areas"] = areas
-    temp_data["weights"] = areas / wbd.iloc[0].areasqkm
-    dtf = temp_data.where(temp_data.areas > 0, drop=True).to_dataframe().dropna()
+    weights = xarray.Dataset()
+    weights["ids"] = ids
+    weights["areas"] = areas
+    weights["weights"] = areas / wbd.iloc[0].areasqkm
+    weights.to_netcdf("./data/output/trinity/ids-and-weights.nc")
+    dtf = weights.where(weights.areas > 0, drop=True).to_dataframe().dropna()
     dtf.to_csv("./data/output/trinity/ids.csv")
-    print("Saved IDs to", "./data/output/trinity/ids.csv")
-
-    pool = mp.Pool(mp.cpu_count() - 1) # leave one so that your computer doesn't freeze
-    results = pool.starmap_async(process_file,
-                                 [(inputpaths[i],
-                                   outputpaths[i],
-                                   ids, areas, wbd.iloc[0].areasqkm)
-                                  for i in range(len(inputpaths))]).get()
-    pool.close()
+    print("Saved IDs to", "./data/output/trinity/ids.csv & ./data/output/trinity/ids-and-weights.nc")
+    for ip,op in zip(inputpaths, outputpaths):
+        process_file(ip, op, weights)
     return results
 
 
 def process_file(inputpath: str,
                  outputpath: str,
-                 ids: xarray.Dataset,
-                 areas: xarray.Dataset,
-                 wbd_area: float) -> None:
+                 weights: xarray.Dataset) -> None:
     '''
     Chains the import_file and grids_ids_and_areas
     '''
-    df = import_file(inputpath, ids, areas, wbd_area)
+    df = import_file(inputpath, weights)
     print(f"to csv: {outputpath}")
     df.to_csv(outputpath)
 
 
 def import_file(filepath: str,
-                ids: xarray.Dataset,
-                areas: xarray.Dataset,
-                wbd_area: float) -> pd.DataFrame:
+                weights: xarray.Dataset) -> pd.DataFrame:
     '''
     Imports a Livneh NetCDF file and returns a geopandas GeoDataFrame containing the Livneh data clipped to the mask area.
 
@@ -116,12 +107,14 @@ def import_file(filepath: str,
         gpd.GeoDataFrame: containing ['date', 'prec', 'lat' and 'lon'] for polygons constructed the ['lat', 'lon'] centroids of each Livneh gridcell.
     '''
     netCDF = xr.open_dataset(filepath)
-    NETCDF["ids"] = ids
-    netCDF["area_km2"] = areas
-    netCDF["area_weight"] = areas / wbd_area
-    df = netCDF.where(netCDF.area_weight > 0, drop=True).to_dataframe()
-    df.index.names = ["date", "lat", "lon"]
-    return df.dropna()
+    # following two lines will get the whole dataframe with weights
+    # like before, but it only increases the IO time and processing
+    # time later on, I think we don't need it now.
+    # df = cropped_grids.to_dataframe()
+    # df.index.names = ["date", "lat", "lon"]
+    weighted = (netCDF.prec * weights.weights).sum(dim=["lat", "lon"])
+    weighted.name = "prec"
+    return weighted.to_dataframe()
 
 
 def grid_ids_and_areas(filepath: str, bbox: List[int], mask: gpd.GeoDataFrame):
@@ -168,6 +161,7 @@ def grid_ids_and_areas(filepath: str, bbox: List[int], mask: gpd.GeoDataFrame):
         index=itertools.product(lats_ind, lons_ind),
         geometry=geometry, crs=mask.crs)
     geom_unclip.set_geometry("geometry", inplace=True)
+    # can be further sped up if we simplify the mask layer
     clipped = gpd.clip(geom_unclip,
                        mask,
                        keep_geom_type=False).to_crs("EPSG:3857")
@@ -181,6 +175,18 @@ def grid_ids_and_areas(filepath: str, bbox: List[int], mask: gpd.GeoDataFrame):
         ids[ll] = i
         i += 1
     return ids, areas
+
+
+def timeseries(input_files, weights):
+    # it also takes time, similar to initial processing, I wonder how
+    # it'll do if I had a single nc file for precipitation
+    comb = []
+    for path in input_files:
+        xar = xarray.open_dataset(path)
+        new = (xar.prec * weights.weights).sum(dim=["lat", "lon"])
+        comb.append(new)
+    return xarray.concat(comb)
+
 
 
 def compute_series(outpaths: List[str], ndays: List[int]):
@@ -198,14 +204,17 @@ def compute_series(outpaths: List[str], ndays: List[int]):
     Note:
         **Also writes out .csv files: (1) summarizing the series events (dates, overall depth, etc.), (2) the series gridded data.
     '''
-    pool = mp.Pool(1)# mp.cpu_count()-1) # leave one so that your computer doesn't freeze
-    results = pool.starmap_async(_ams_and_pds, [(outpaths, n) for n in ndays]).get()
-    pool.close()
+    _ams_and_pds(outpaths, 1)
+    # pool = mp.Pool(1)# mp.cpu_count()-1) # leave one so that your computer doesn't freeze
+    # results = pool.starmap_async(_ams_and_pds, [(outpaths, n) for n in ndays]).get()
+    # pool.close()
     return results
 
 
 def _ams_and_pds(outpaths: List[str], ndays: int):
+    print("ams")
     ams_data = ams(outpaths, ndays)
+    print("pds")
     pds_data = pds(outpaths, np.min(ams_data[0].p_mm.to_numpy()), ndays)
     return 'success'
 
@@ -223,17 +232,20 @@ def ams(outpaths: List[str], ndays: int = 1) -> pd.DataFrame:
     Note: Also writes out the AMS series (amsNdy.csv) and gridded event data (amsNdy_grids.csv) where N = ndays, to an 'ams' sub-directory in the outpaths directory.
     '''
 
-    basin, grids = series_data(outpaths, ndays) # basin avg precip and gridded data for all yrs
-    basin['yr'] = pd.DatetimeIndex(basin['date']).year
-    series = basin[basin['p_mm'] == basin.groupby(['yr'])['p_mm'].transform(max)].reset_index() # annual max series
-    series = series.drop(columns=['index']).rename(columns={'date': 'end_date'})
-    series['start_date'] = pd.to_datetime(series.loc[:, 'end_date'].to_numpy()) - pd.to_timedelta(ndays - 1, unit='d')
-    series_grids = event_data(series, grids)
+    print("series data processing start")
+    basin = series_data(outpaths, ndays) # basin avg precip and gridded data for all yrs
+    year = pd.DatetimeIndex(basin.index).year
+    series = basin[basin == basin.groupby(year).transform(max)] # annual max series
+    ams_series = pd.DataFrame({"p_mm": series, "end_date": series.index}).reset_index().drop(columns=["date"])
+    ams_series.loc[:, 'start_date'] = pd.to_datetime(ams_series.loc[:, 'end_date'].to_numpy()) - pd.to_timedelta(ndays - 1, unit='d')
+    print("series data processing done")
+    exit(0)
+    series_grids = event_data(series)  # have to make it read gridded data
     series.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_events.csv', index=False)
     series_grids.to_csv(f'{outpaths[0].rsplit("/", 1)[0]}/ams/{str(ndays)}dy_grids.csv')
     return series, series_grids
 
-
+# did I miss something here? Why's this part detached?
     dfs = series_data(outpaths, ndays)
     # find ams series
     df_ams = dfs[0]
@@ -252,9 +264,8 @@ def pds(outpaths: List[str], threshold: float, ndays:int = 1):
     # import all processed livneh data and get basin average precipitation data
     dfs = series_data(outpaths, ndays)
     # find peaks over theshold series
-    df_pds = dfs[0].copy(deep=True)
-    df_pds = df_pds[df_pds.p_mm >= threshold]
-    df_pds = df_pds.rename(columns={'date': 'end_date'})
+    avove_th = dfs[dfs >= threshold]
+    df_pds = pd.DataFrame({"p_mm":dfs, "end_date":dfs.index})
     df_pds['start_date'] = pd.to_datetime(df_pds.loc[:,'end_date'].to_numpy()) - pd.to_timedelta(ndays - 1, unit='d')
     # print pds data
     pds_grids = event_data(df_pds, dfs[1].copy(deep=True))
@@ -267,13 +278,15 @@ def series_data(outpaths: List[str], ndays: int) -> pd.DataFrame:
     # import all processed livneh data
     dfs: List[pd.DataFrame] = []
     for path in outpaths:
-        dfs.append(pd.read_csv(path))
-    df = pd.concat(dfs)
-    basin = df.copy(deep = True)
-    basin['p_mm'] = basin['prec'].to_numpy() * basin['area_weight'].to_numpy()
-    basin = basin[['date', 'p_mm']].groupby(['date']).sum().reset_index().copy(deep=True)
-    basin['p_mm'] = basin['p_mm'].rolling(ndays, min_periods=1).sum()
-    return basin, df
+        # this takes a lot of ram since it'll have total rows around
+        # 365 (days) * 4000 (grids) * 100 (yr)
+        df = pd.read_csv(path)
+        p_mm = pd.Series(df['prec'].to_numpy() * df['area_weight'].to_numpy(), index=df['date'])
+        p_mm.name = "p_mm"
+        ts = p_mm.groupby(p_mm.index).sum()
+        dfs.append(ts)
+    basin = pd.concat(dfs)
+    return basin.rolling(ndays, min_periods=1).sum()
 
     # df_all = gpd.GeoDataFrame()
     # for path in outpaths:

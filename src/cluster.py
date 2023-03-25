@@ -5,16 +5,19 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from kneed import KneeLocator
 
+
 def storm_centers(df: pd.DataFrame):
     m = dimensionality_reduction(df)
     labels = clustering(m)
     df['cluster'] = labels
     return df
 
+
 def dimensionality_reduction(df: pd.DataFrame):
     pca = PCA(n_components=20)
     return pca.fit_transform(StandardScaler().fit_transform(df.to_numpy()))
-        
+
+
 def clustering(m: np.ndarray):
     sse = []
     for k in range(2, 11):
@@ -23,6 +26,7 @@ def clustering(m: np.ndarray):
     knee = KneeLocator(range(2, 11), sse, curve='convex', direction='decreasing').elbow
     clusters = KMeans(n_clusters=knee).fit(m) #m[:,:4]
     return clusters.labels_
+
 
 def cluster_means(dflabeled: pd.DataFrame, dfgrids: pd.DataFrame):
     cluster_means = dfgrids.copy(deep=True)
@@ -34,7 +38,8 @@ def cluster_means(dflabeled: pd.DataFrame, dfgrids: pd.DataFrame):
             means[j] = cluster[str(j)].mean()
         cluster_means[i] = means
     return cluster_means
-                 
+
+
 def normalize_cluster(df: pd.DataFrame, ids: pd.DataFrame):
     nclusters = sum([1 if type(c) is int else 0 for c in df.columns.values])
     df.sort_values(by='id', inplace=True)

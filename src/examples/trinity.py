@@ -102,7 +102,7 @@ wbd_area = huc.areasqkm
 # In[5]:
 
 
-buffer: float = 1/32
+buffer: float = 1/16
 # bbox = [west, south, east, north] coordinates
 bbox: List[float] = list(huc.geometry.bounds)
 bbox[0] = bbox[0] - buffer
@@ -132,10 +132,10 @@ end_paths: List[str] = livneh.outputfilepaths(output, srt_paths)
 # In[8]:
 
 # Took a lot of time, at least I removed some redundant parts
-print_msg = livneh.process_files(srt_paths, end_paths, bbox, wbd)
-exit(0)
+if True:
+    print_msg = livneh.process_files(srt_paths, end_paths, bbox, wbd)
 # print(f'processed: {print_msg}')
-
+exit(0)
 
 # Takes the processed .csv livneh files for the area of interest, and returns partial duration (PDS) and annual maximum series (AMS) for the specified list of durations in days.
 
