@@ -1,4 +1,4 @@
-'''A command line entry point for the locus analysis'''
+"""A command line entry point for the locus analysis"""
 from enum import Enum
 import argparse
 import pandas as pd
@@ -64,68 +64,74 @@ def plot_clusters(huc: HUC, args):
         return
     else:
         return
-    
+
     df_clustered = cluster.storm_centers(grids)
     ids = pd.read_csv(huc.data_path("ids.csv"), index_col="ids")
-    shift = 1/32
-    geometry = [shapely.box(lon - shift,
-                            lat - shift,
-                            lon + shift,
-                            lat + shift)
-                for lat,lon in zip(ids["lat"], ids["lon"])]
-    ids = gpd.GeoDataFrame(ids,
-                           geometry=geometry)
+    shift = 1 / 32
+    geometry = [
+        shapely.box(lon - shift, lat - shift, lon + shift, lat + shift)
+        for lat, lon in zip(ids["lat"], ids["lon"])
+    ]
+    ids = gpd.GeoDataFrame(ids, geometry=geometry)
     ids.set_index(pd.Index(ids.index, dtype=int), inplace=True)
     means = df_clustered.groupby("cluster").mean().T
-    cluster_means = ids.join(means.set_index(pd.Index(means.index.map(float), dtype=int)))
+    cluster_means = ids.join(
+        means.set_index(pd.Index(means.index.map(float), dtype=int))
+    )
     nclusters = len(df_clustered.cluster.unique())
-    maximum = math.ceil(
-        cluster_means.loc[:, list(range(nclusters))].max().max()/10)*10
-    minimum = math.floor(
-        cluster_means.loc[:, list(range(nclusters))].min().min()/10)*10
+    maximum = (
+        math.ceil(cluster_means.loc[:, list(
+            range(nclusters))].max().max() / 10) * 10
+    )
+    minimum = (
+        math.floor(cluster_means.loc[:, list(
+            range(nclusters))].min().min() / 10) * 10
+    )
 
-    plt.subplots_adjust(**{k:0.01 for k in ["left", "bottom"]},
-                        **{l:0.99 for l in ["top", "right"]},
-                        **{l:0.1 for l in ["wspace", "hspace"]})
-    fig, axs = plt.subplots(nrows=2,
-                            ncols=nclusters,
-                            figsize=(5*nclusters, 12),
-                            sharex=True, sharey=True)
+    plt.subplots_adjust(
+        **{k: 0.01 for k in ["left", "bottom"]},
+        **{l: 0.99 for l in ["top", "right"]},
+        **{l: 0.1 for l in ["wspace", "hspace"]},
+    )
+    fig, axs = plt.subplots(
+        nrows=2, ncols=nclusters, figsize=(5 * nclusters, 12), sharex=True, sharey=True
+    )
     for i in range(nclusters):
-        cluster_means.plot(ax=axs[0, i],
-                           column=i,
-                           vmin=minimum,
-                           vmax=maximum,
-                           legend=True) 
-        cluster_means.plot(ax=axs[1, i],
-                           column=i,
-                           legend=True)
-        axs[0, i].set_title(f'cluster: {i}')
-        axs[1, i].set_title(f'cluster: {i}')
+        cluster_means.plot(
+            ax=axs[0, i], column=i, vmin=minimum, vmax=maximum, legend=True
+        )
+        cluster_means.plot(ax=axs[1, i], column=i, legend=True)
+        axs[0, i].set_title(f"cluster: {i}")
+        axs[1, i].set_title(f"cluster: {i}")
     plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
     print(huc.image_path(f"{series}_{ndays}dy.png"))
 
 
 def cli_parser():
     parser = argparse.ArgumentParser(
-                        prog='locus',
-                        description='Analyse extreme precipitation pattern',
-                        epilog='https://github.com/Atreyagaurav/locus-code-usace')
+        prog="locus",
+        description="Analyse extreme precipitation pattern",
+        epilog="https://github.com/Atreyagaurav/locus-code-usace",
+    )
     parser.add_argument("HUCode")
-    parser.add_argument("-n", "--num-days",
-                        default=1,
-                        type=int,
-                        help="Number of Days for ams/pds event")
-    parser.add_argument("-s", "--series",
-                        choices=["ams", "pds", "both"],
-                        default="both",
-                        help="ams or pds event to plot")
+    parser.add_argument(
+        "-n", "--num-days", default=1, type=int, help="Number of Days for ams/pds event"
+    )
+    parser.add_argument(
+        "-s",
+        "--series",
+        choices=["ams", "pds", "both"],
+        default="both",
+        help="ams or pds event to plot",
+    )
     for act in CliAction:
         flag_name = act.name.lower().replace("_", "-")
-        parser.add_argument(f"-{flag_name[0]}",
-                            f"--{flag_name}",
-                            action='store_true',
-                            help=f'run the {act.name.lower()} function')
+        parser.add_argument(
+            f"-{flag_name[0]}",
+            f"--{flag_name}",
+            action="store_true",
+            help=f"run the {act.name.lower()} function",
+        )
     return parser
 
 
@@ -135,11 +141,15 @@ if __name__ == "__main__":
     huc = HUC(args.HUCode)
     print(f"Processing for: {huc}")
     if args.batch_process:
-        flags = sorted(filter(lambda f: f != CliAction.BATCH_PROCESS, CliAction),
-                       key = lambda a: a.value)
+        flags = sorted(
+            filter(lambda f: f != CliAction.BATCH_PROCESS, CliAction),
+            key=lambda a: a.value,
+        )
     else:
-        flags = sorted(filter(lambda f: args.__dict__.get(f.name.lower()), CliAction),
-                       key = lambda a: a.value)
+        flags = sorted(
+            filter(lambda f: args.__dict__.get(f.name.lower()), CliAction),
+            key=lambda a: a.value,
+        )
     if len(flags) == 0:
         parser.print_help()
         exit(0)
