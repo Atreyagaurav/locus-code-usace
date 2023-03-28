@@ -1,8 +1,13 @@
+import os
+from typing import List
+import itertools
 import xarray
 import fiona
 import shapely
 from src.livneh import LivnehData
 from datetime import datetime
+import pandas as pd
+import geopandas as gpd
 
 # https://prd-tnm.s3.amazonaws.com/StagedProducts/Hydrography/WBD/National/GPKG/WBD_National_GPKG.zip
 # fiona.listlayers("./data/WBD_National_GPKG.gpkg")
@@ -27,8 +32,6 @@ class HUC:
         if N%2 == 1:
             raise InvalidHUCode(f"HUCode are even length, {code} has odd length")
         self.huc_code = code
-        os.makedirs(self.data_path(), exist_ok=True)
-        os.makedirs(self.image_path(), exist_ok=True)
         with fiona.open(HUC.GPKG_FILE, layer=f"WBDHU{N}") as l:
             try:
                 # the python filter is slow since it happens on the
@@ -46,6 +49,8 @@ class HUC:
             except StopIteration:
                 raise InvalidHUCode(f"No match for {code} in {HUC.GPKG_FILE}")
         self.geometry = shapely.geometry.shape(self.feature["geometry"])
+        os.makedirs(self.data_path(), exist_ok=True)
+        os.makedirs(self.image_path(), exist_ok=True)
         self.load_weights(calculate=False)
 
     def __getattr__(self, obj):
@@ -99,7 +104,7 @@ class HUC:
         year_julian = [(d.year, dates[0].timetuple().tm_yday) for d in dates]
         bbox = self.buffered_bbox()
         def get_df(yr_jul):
-            netCDF = xr.open_dataset(LivnehData.input_file(yr_jul[0]))
+            netCDF = xarray.open_dataset(LivnehData.input_file(yr_jul[0]))
             lats = list(filter(lambda il: il[1] > bbox[1] and il[1] < bbox[3],
                                enumerate(netCDF.lat.to_numpy())))
             lons = list(filter(lambda il: il[1] > bbox[0] and il[1] < bbox[2],
@@ -116,10 +121,10 @@ class HUC:
     def process_annual_timeseries(self, year: int) -> pd.DataFrame:
         if self.weights is None:
             self.calculate_weights()
-        netCDF = xr.open_dataset(LivnehData.input_file(year))
+        netCDF = xarray.open_dataset(LivnehData.input_file(year))
         weighted = (netCDF.prec * self.weights.weights).sum(dim=["lat", "lon"])
         weighted.name = "prec"
-        df = weighted.to_dataframe().set_index("time")
+        df = weighted.to_dataframe()
         df.to_csv(self.data_path(f"prec.{year}.csv"))
         return df
 
@@ -134,7 +139,7 @@ class HUC:
                 self.weights = None
 
     def calculate_weights(self):
-        netCDF = xr.open_dataset(next(LivnehData.all_input_files()))
+        netCDF = xarray.open_dataset(next(LivnehData.all_input_files()))
         bbox = self.buffered_bbox()
         lats = list(filter(lambda il: il[1] > bbox[1] and il[1] < bbox[3],
                            enumerate(netCDF.lat.to_numpy())))
@@ -142,37 +147,34 @@ class HUC:
                            enumerate(netCDF.lon.to_numpy() - 360)))
         lats_ind = [i for i, l in lats]
         lons_ind = [i for i, l in lons]
-        lats = [l for i, l in lats]
-        lons = [l for i, l in lons]
         latlon = pd.Series(itertools.product(lats, lons))
-        lat = latlon.map(lambda ll: ll[0]).to_numpy()
-        lon = latlon.map(lambda ll: ll[1]).to_numpy()
         shift = 1/32
-        n, s, e, w = lat + shift, lat - shift, lon + shift, lon - shift
-        geometry = [Polygon(zip([w[i], e[i], e[i], w[i]],
-                                [n[i], n[i], s[i], s[i]]))
-                    for i in range(len(lat))]
+        geometry = [shapely.box(lon - shift,
+                                lat - shift,
+                                lon + shift,
+                                lat + shift)
+                    for ((_, lat), (_, lon)) in latlon]
         
         mask = self.geometry_as_geodataframe()
         geom_unclip = gpd.GeoDataFrame(
-            index=itertools.product(lats_ind, lons_ind),
+            index=latlon,
             geometry=geometry, crs=mask.crs)
         geom_unclip.set_geometry("geometry", inplace=True)
         # can be further sped up if we simplify the mask layer
         clipped = gpd.clip(geom_unclip,
                            mask,
                            keep_geom_type=False).to_crs(HUC.AREA_CRS)
-        area = clipped.geometry.map(lambda g: g.area / 1_000_000)
-        areas = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"))
-        ids = xarray.zeros_like(netCDF.prec.isel(time=0).drop_vars("time"),
-                                dtype=int)
+        area = clipped.geometry.map(lambda g: g.area / 1_000_000)  # sqkm
+        self._set_and_save_weights(area, template=netCDF.prec.isel(time=0).drop_vars("time"))
 
+    def _set_and_save_weights(self, area, /, template):
+        areas = xarray.zeros_like(template)
+        ids = xarray.zeros_like(template, dtype=int)
         i = 1
-        for ll, a in area.items():
-            areas[ll] = a
-            ids[ll] = i
+        for ((lat_ind, _), (lon_ind, _)), a in area.items():
+            areas[(lat_ind, lon_ind)] = a
+            ids[(lat_ind, lon_ind)] = i
             i += 1
-        # save the ids and weights
         weights = xarray.Dataset()
         weights["ids"] = ids
         weights["areas"] = areas
@@ -180,4 +182,3 @@ class HUC:
         self.weights = weights.where(weights.ids > 0, drop=True)
         self.weights.to_netcdf(self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
         self.weights.ids.to_dataframe().dropna().to_csv(self.data_path("ids.csv"))
-
