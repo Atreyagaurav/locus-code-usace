@@ -25,8 +25,8 @@ class HUC:
 
     @classmethod
     def all_huc_codes(cls, N: int):
-        with fiona.open(HUC.GPKG_FILE, layer=f"WBDHU{N}") as l:
-            yield from map(lambda f: f["properties"][f"huc{N}"], l)
+        with fiona.open(HUC.GPKG_FILE, layer=f"WBDHU{N}") as layer:
+            yield from map(lambda f: f["properties"][f"huc{N}"], layer)
 
     def __init__(self, code):
         N: int = len(code)
@@ -34,7 +34,7 @@ class HUC:
             raise InvalidHUCode(
                 f"HUCode are even length, {code} has odd length")
         self.huc_code = code
-        with fiona.open(HUC.GPKG_FILE, layer=f"WBDHU{N}") as l:
+        with fiona.open(HUC.GPKG_FILE, layer=f"WBDHU{N}") as layer:
             try:
                 # the python filter is slow since it happens on the
                 # python side. fiona 2.0 will have a new syntax
@@ -45,10 +45,10 @@ class HUC:
                 # if you do: pip install git+https://github.com/Toblerity/Fiona.git
                 # you can install the version 2 that's currently under developement
                 if fiona.__version__ > "2.":
-                    self.feature = next(l.filter(where=f"huc{N}='{code}'"))
+                    self.feature = next(layer.filter(where=f"huc{N}='{code}'"))
                 else:
                     self.feature = next(
-                        filter(lambda f: f["properties"][f"huc{N}"] == code, l)
+                        filter(lambda f: f["properties"][f"huc{N}"] == code, layer)
                     )
             except StopIteration:
                 raise InvalidHUCode(f"No match for {code} in {HUC.GPKG_FILE}")
@@ -168,8 +168,6 @@ class HUC:
                 enumerate(netCDF.lon.to_numpy() - 360),
             )
         )
-        lats_ind = [i for i, l in lats]
-        lons_ind = [i for i, l in lons]
         latlon = pd.Series(itertools.product(lats, lons))
         shift = 1 / 32
         geometry = [

@@ -1,17 +1,16 @@
 """A command line entry point for the locus analysis"""
-from enum import Enum
 import argparse
-import pandas as pd
 import geopandas as gpd
-import matplotlib.pyplot as plt
-import time
 import math
+import matplotlib.pyplot as plt
+import pandas as pd
 import shapely
+import time
+from enum import Enum
 
-from src.huc import HUC, InvalidHUCode
-from src.livneh import LivnehData
 import src.cluster as cluster
 import src.precip as precip
+from src.huc import HUC
 
 
 YEARS = list(range(1915, 2011))
@@ -90,11 +89,15 @@ def plot_clusters(huc: HUC, args):
 
     plt.subplots_adjust(
         **{k: 0.01 for k in ["left", "bottom"]},
-        **{l: 0.99 for l in ["top", "right"]},
-        **{l: 0.1 for l in ["wspace", "hspace"]},
+        **{k: 0.99 for k in ["top", "right"]},
+        **{k: 0.1 for k in ["wspace", "hspace"]},
     )
     fig, axs = plt.subplots(
-        nrows=2, ncols=nclusters, figsize=(5 * nclusters, 12), sharex=True, sharey=True
+        nrows=2,
+        ncols=nclusters,
+        figsize=(5 * nclusters, 12),
+        sharex=True,
+        sharey=True
     )
     for i in range(nclusters):
         cluster_means.plot(
@@ -115,7 +118,11 @@ def cli_parser():
     )
     parser.add_argument("HUCode")
     parser.add_argument(
-        "-n", "--num-days", default=1, type=int, help="Number of Days for ams/pds event"
+        "-n",
+        "--num-days",
+        default=1,
+        type=int,
+        help="Number of Days for ams/pds event"
     )
     parser.add_argument(
         "-s",
