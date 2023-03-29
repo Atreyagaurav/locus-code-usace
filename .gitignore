@@ -1,5 +1,10 @@
-data/input/waterboundary/*
-data/output/trinity/*   
+data/input/
+data/output/
+images/
+
+data/WBD_National_GPKG.*
+venv/
+
 **/__pycache__
 **/__pycache__/
 *.DS_Store
