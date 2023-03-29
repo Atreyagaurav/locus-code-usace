@@ -7,16 +7,24 @@ import pandas as pd
 import shapely
 import time
 from enum import Enum
+from typing import List
 
 import src.cluster as cluster
 import src.precip as precip
 from src.huc import HUC
 
 
-YEARS = list(range(1915, 2011))
+YEARS: List[int] = list(range(1915, 2011))
 
 
 class CliAction(Enum):
+    """Actions that can be performed in a basin with HUCode
+
+    Each entries here should have curresponding methods in this module
+    with the same name in lowercase that can be called with a huc.HUC
+    object and commandline arguments.
+
+    """
     CALCULATE_WEIGHTS = 0
     EXTRACT_ANNUAL_TIMESERIES = 1
     AMS_AND_PDS = 2
