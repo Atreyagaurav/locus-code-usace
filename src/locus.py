@@ -7,6 +7,7 @@ import pandas as pd
 import shapely
 import time
 from enum import Enum
+from datetime import datetime
 from typing import List
 
 import src.cluster as cluster
@@ -114,6 +115,7 @@ def plot_clusters(huc: HUC, args):
         cluster_means.plot(ax=axs[1, i], column=i, legend=True)
         axs[0, i].set_title(f"cluster: {i}")
         axs[1, i].set_title(f"cluster: {i}")
+    plt.suptitle(f"Precipitation Patterns in {huc}")
     plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
     print(huc.image_path(f"{series}_{ndays}dy.png"))
 
@@ -131,6 +133,24 @@ def cli_parser():
         default=1,
         type=int,
         help="Number of Days for ams/pds event"
+    )
+    parser.add_argument(
+        "-l",
+        "--list-hucs",
+        action="store_true",
+        help="List HUCodes in the given category and exit"
+    )
+    parser.add_argument(
+        "-d",
+        "--details",
+        action="store_true",
+        help="print basin details before processing"
+    )
+    parser.add_argument(
+        "-D",
+        "--details-only",
+        action="store_true",
+        help="print basin details and exit"
     )
     parser.add_argument(
         "-s",
@@ -153,8 +173,21 @@ def cli_parser():
 if __name__ == "__main__":
     parser = cli_parser()
     args = parser.parse_args()
+    if args.list_hucs:
+        for (code, name) in HUC.all_huc_codes(args.HUCode):
+            print(code, ":", name)
+        exit(0)
+
     huc = HUC(args.HUCode)
-    print(f"Processing for: {huc}")
+    print(f"** Basin: {huc}")
+    print("Processed at", datetime.now())
+    if args.details or args.details_only:
+        print("Basin properties:")
+        for (k, v) in huc.feature["properties"].items():
+            print(f"    + {k} = {v}")
+        if args.details_only:
+            exit(0)
+
     if args.batch_process:
         flags = sorted(
             filter(lambda f: f != CliAction.BATCH_PROCESS, CliAction),
@@ -169,9 +202,9 @@ if __name__ == "__main__":
         parser.print_help()
         exit(0)
     for flag in flags:
+        print(f"*** {flag.name}")
         func_name = flag.name.lower()
         t1 = time.time()
         locals()[func_name](huc, args)
         dur = time.time() - t1
-        print(f"*** {flag.name}")
-        print(f"*** Time taken: {dur: .3f} seconds ({dur / 60: .2} minutes)")
+        print(f"    Time taken: {dur: .3f} seconds ({dur / 60: .2} minutes)")

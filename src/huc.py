@@ -1,5 +1,5 @@
 import os
-from typing import List, Iterator
+from typing import List, Iterator, Tuple
 import itertools
 import xarray
 import fiona
@@ -40,16 +40,17 @@ class HUC:
     IDS_AND_WEIGHTS_FILENAME: str = "ids-and-weights.nc"
 
     @classmethod
-    def all_huc_codes(cls, N: int) -> Iterator[str]:
+    def all_huc_codes(cls, N: int) -> Iterator[Tuple[str, str]]:
         """List all HUCodes for the given category
 
         :param N: category of Hydrologic Unit (2, 4, 6, ..., 16)
         :type N: int
-        :returns: Iterator[str]
+        :returns: Iterator[Tuple[str, str]]
 
         """
         with fiona.open(HUC.GPKG_FILE, layer=f"WBDHU{N}") as layer:
-            yield from map(lambda f: f["properties"][f"huc{N}"], layer)
+            yield from map(lambda l: (l["properties"][f"huc{N}"],
+                                      l["properties"]["name"]), layer)
 
     def __init__(self, code: str):
         """Init HUC object
