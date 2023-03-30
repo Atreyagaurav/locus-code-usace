@@ -172,9 +172,18 @@ Seems like the extraction part is similar for all the basins, but the other ones
 
 # Tips and tricks
 ## Running in parallel
-The original plan was to run everything without multiprocessing in the module itself, so multiple basins could be processed in parallel, but there seems to be some problem with the reading of netCDF from xarray or something that is giving some troubles. will have to look at it.
+The program is written to run everything without multiprocessing in the module itself, so multiple basins can be processed in parallel.
 
-The plan is to use the `--list-hucs` command to get a list of codes for all basins, and then run the batch processing in parallel for them.
+Use the `--list-hucs` command to get a list of codes for all basins, and then run the batch processing in parallel for them. You may want to filter the basins to only the ones that you want to process.
+
+There are some basins that seem to be troublesome, you can add the `--timeout` flag on `gnu parallel` to kill processes that take too much time.
+
+Here the first line makes the list of huc2 basins, edit it to the basins you want. Then run the second line that'll get the codes from that file and run locus on parallel, `-j 4` will run 4 process in parallel at a given time, `--timeout 200%` will kill any process that takes more than double the median time to complete.
+
+    python -m src.locus -l 2 > basin-lists/huc2.txt
+	awk -F ' :' '{print $1}' < basin-lists/huc4.txt | parallel --timeout 200% -j 4 --bar 'python -m src.locus -d -b {0} >> reports/{0}.org'
+
+You can also log the progress and resume from the where you left off. For more usage refer to `gnu parallel` manual.
 
 ## Remore extra paddings for plots
 The plots are a little weird, and I'm not that familiar with matplotlib, it seems to have a lot of extra border specially since we don't know how many clusters will be there, so I use `imagemagick` to trim the borders.
