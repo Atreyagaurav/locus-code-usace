@@ -16,6 +16,7 @@ def calculate_ams_series(huc: HUC, years: List[int], ndays: int) -> pd.DataFrame
     )
     ams_series.loc[:, "duration"] = ndays
     ams_series.to_csv(huc.data_path(f"ams_{ndays}dy_series.csv"), index=None)
+    print(":", huc.data_path(f"ams_{ndays}dy_series.csv"))
     return ams_series
 
 
@@ -38,6 +39,7 @@ def calculate_pds_series(
     )
     pds_series.loc[:, "duration"] = ndays
     pds_series.to_csv(huc.data_path(f"pds_{ndays}dy_series.csv"))
+    print(":", huc.data_path(f"pds_{ndays}dy_series.csv"))
     return pds_series
 
 
@@ -72,6 +74,7 @@ def load_pds_grids(
         pds = load_pds_series(huc, years, ndays, threshold)
         grids = calculate_series_grids(huc, pds)
         grids.to_csv(huc.data_path(f"pds_{ndays}dy_grids.csv"))
+        print(":", huc.data_path(f"pds_{ndays}dy_grids.csv"))
         return grids
 
 
@@ -84,4 +87,5 @@ def load_ams_grids(huc: HUC, years: List[int], ndays: int) -> pd.DataFrame:
         ams = load_ams_series(huc, years, ndays)
         grids = calculate_series_grids(huc, ams)
         grids.to_csv(huc.data_path(f"ams_{ndays}dy_grids.csv"))
+        print(":", huc.data_path(f"ams_{ndays}dy_grids.csv"))
         return grids

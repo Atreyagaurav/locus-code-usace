@@ -117,7 +117,7 @@ def plot_clusters(huc: HUC, args):
         axs[1, i].set_title(f"cluster: {i}")
     plt.suptitle(f"Precipitation Patterns in {huc}")
     plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
-    print(huc.image_path(f"{series}_{ndays}dy.png"))
+    print(":", huc.image_path(f"{series}_{ndays}dy.png"))
 
 
 def cli_parser():
@@ -208,3 +208,4 @@ if __name__ == "__main__":
         locals()[func_name](huc, args)
         dur = time.time() - t1
         print(f"    Time taken: {dur: .3f} seconds ({dur / 60: .2} minutes)")
+        print(flush=True)

@@ -108,7 +108,10 @@ Files: `{ams,pds}_Ndy.png` where N is the `num_days` (duration of event consider
 Plot of the clusters made from the events data for the AMS list or PDS list. The images show clusters with individual scale on bottom, and global scale on top for comparision.
 
 ## Run Times
-This is the runtime on Trinity (HUCode: 1203) on my laptop (CPU: AMD Ryzen 7 6800U with Radeon Graphics (16) @ 2.700GHz).
+This is the runtime on Trinity (HUCode: 1203) on my laptop
+- CPU: AMD Ryzen 7 6800U with Radeon Graphics (16) @ 2.700GHz,
+- Storage: PCIe Gen 4 NVMe SSD Up to Seq Read: 4000MB/s, Write: 2000MB/s,
+- RAM:  32 GB Dual Channel LPDDR5 up to 5500 MHz
 
 On the first run, where it has to calculate everything:
 
@@ -167,7 +170,6 @@ For Ohio Region <HUC 05>
 
 Seems like the extraction part is similar for all the basins, but the other ones vary by size. But it's reasonable time if you want to process a lot of basins.
 
-
 # Tips and tricks
 ## Running in parallel
 The original plan was to run everything without multiprocessing in the module itself, so multiple basins could be processed in parallel, but there seems to be some problem with the reading of netCDF from xarray or something that is giving some troubles. will have to look at it.
@@ -186,4 +188,20 @@ The output of the command can be piped, only the reporting texts from the main f
 If you need to print any debugging information that's not supposed to goto the report, print it in the `stderr`.
 
 # Note
+
+## Livneh Data Range
+The Livneh Data Range is approximately from lat 25 to 53, and lon -125 to -67, which means it doesn't cover the following regions:
+- Alaska Region <HUC 19>
+  (-179.230, 51.157, 179.857, 71.440)
+- Hawaii Region <HUC 20>
+  (-178.431, 18.860, -154.753, 28.507)
+- Caribbean Region <HUC 21>
+  (-68.004, 17.624, -64.513, 18.567)
+- South Pacific Region <HUC 22>
+  (-176.674, -14.610, 166.711, 20.604)
+
+## Reporting Times
 The time reported can include other steps than the one you asked it to do, if that is needed. For example, if you asked for extracting the timeseries, then it'll calculate the weights if there is no weights, or if you ask for `ams/pds` it'll extract the timeseries.
+
+## Weird behaviours
+HUC 09 takes a really long time (2.1 minutes in my laptop), I don't know why. Could be due to geometry? Need to check it out. Same with Great Lakes Region.

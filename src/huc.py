@@ -208,8 +208,8 @@ class HUC:
         year_julian = [(d.year, dates[0].timetuple().tm_yday) for d in dates]
         bbox = self.buffered_bbox()
 
-        def get_df(yr_jul):
-            netCDF = xarray.open_dataset(LivnehData.input_file(yr_jul[0]))
+        def get_df(yr, jul):
+            netCDF = xarray.open_dataset(LivnehData.input_file(yr))
             lats = list(
                 filter(
                     lambda il: il[1] > bbox[1] and il[1] < bbox[3],
@@ -225,12 +225,12 @@ class HUC:
             lats_ind = [i for i, l in lats]
             lons_ind = [i for i, l in lons]
             grid_day = netCDF.prec.isel(
-                lon=lons_ind, lat=lats_ind, time=yr_jul[1] - 1
+                lon=lons_ind, lat=lats_ind, time=jul - 1
             ).fillna(0)
             grid_day["ids"] = self.weights.ids
             return grid_day.to_dataframe()
 
-        return pd.concat(get_df(yj) for yj in year_julian)
+        return pd.concat(get_df(y, j) for y, j in year_julian)
 
     def process_annual_timeseries(self, year: int) -> pd.DataFrame:
         """process the annual timeseries for a year and save it
@@ -251,6 +251,7 @@ class HUC:
         weighted.name = "prec"
         df = weighted.to_dataframe()
         df.to_csv(self.data_path(f"prec.{year}.csv"))
+        print(":", self.data_path(f"prec.{year}.csv"))
         return df
 
     def load_weights(self, /, calculate: bool = False):
@@ -306,12 +307,12 @@ class HUC:
         # can be further sped up if we simplify the mask layer
         clipped = gpd.clip(geom_unclip, mask,
                            keep_geom_type=False).to_crs(HUC.AREA_CRS)
-        area = clipped.geometry.map(lambda g: g.area / 1_000_000)  # sqkm
+        area: pd.Series = clipped.geometry.map(lambda g: g.area / 1_000_000)
         self._set_and_save_weights(
             area, template=netCDF.prec.isel(time=0).drop_vars("time")
         )
 
-    def _set_and_save_weights(self, area, /, template):
+    def _set_and_save_weights(self, area: pd.Series, /, template):
         areas = xarray.zeros_like(template)
         ids = xarray.zeros_like(template, dtype=int)
         i = 1
@@ -319,12 +320,17 @@ class HUC:
             areas[(lat_ind, lon_ind)] = a
             ids[(lat_ind, lon_ind)] = i
             i += 1
+        print(f"Number of Grid Cells in Basin: {i-1}")
         weights = xarray.Dataset()
         weights["ids"] = ids
-        weights["areas"] = areas
-        weights["weights"] = areas / self.areasqkm
+        total_area = self.geometry_as_geodataframe().to_crs(
+                HUC.AREA_CRS).loc[0, "geometry"].area / 1_000_000
+        weights["weights"] = areas / total_area
+        print(f"Sum of weights: {float(weights.weights.sum()): .3f}")
         self.weights = weights.where(weights.ids > 0, drop=True)
         self.weights.to_netcdf(self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
         self.weights.ids.to_dataframe().dropna().to_csv(
             self.data_path("ids.csv")
         )
+        print(":", self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
+        print(":", self.data_path("ids.csv"))
