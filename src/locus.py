@@ -15,7 +15,7 @@ import src.precip as precip
 from src.huc import HUC
 
 
-YEARS: List[int] = list(range(1915, 2011))
+YEARS: List[int] = list(range(1915, 2012))
 
 
 class CliAction(Enum):
