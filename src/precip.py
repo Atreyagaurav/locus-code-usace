@@ -2,6 +2,7 @@ from typing import List
 
 import pandas as pd
 from src.huc import HUC
+from src.livneh import LivnehData
 from datetime import timedelta
 
 
@@ -89,3 +90,8 @@ def load_ams_grids(huc: HUC, years: List[int], ndays: int) -> pd.DataFrame:
         grids.to_csv(huc.data_path(f"ams_{ndays}dy_grids.csv"))
         print(":", huc.data_path(f"ams_{ndays}dy_grids.csv"))
         return grids
+
+
+def get_threhold(huc: HUC, ndays) -> float:
+    ams = load_ams_series(huc, LivnehData.YEARS, ndays)
+    return ams.p_mm.min()

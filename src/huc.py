@@ -114,7 +114,7 @@ class HUC:
                 self.geometry], crs=HUC.SOURCE_CRS
         )
 
-    def buffered_bbox(self, buffer=1 / 16) -> List[float]:
+    def buffered_bbox(self, buffer=LivnehData.RESOLUTION) -> List[float]:
         """buffered bounding box
 
         :param buffer: buffer distance around the geometry
@@ -294,7 +294,7 @@ class HUC:
             )
         )
         latlon = pd.Series(itertools.product(lats, lons))
-        shift = 1 / 32
+        shift = LivnehData.RESOLUTION / 2
         geometry = [
             shapely.box(lon - shift, lat - shift, lon + shift, lat + shift)
             for ((_, lat), (_, lon)) in latlon
@@ -329,7 +329,7 @@ class HUC:
         print(f"Sum of weights: {float(weights.weights.sum()): .3f}")
         self.weights = weights.where(weights.ids > 0, drop=True)
         self.weights.to_netcdf(self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
-        self.weights.ids.to_dataframe().dropna().to_csv(
+        self.weights.to_dataframe().dropna().to_csv(
             self.data_path("ids.csv")
         )
         print(":", self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))

@@ -1,9 +1,11 @@
-from typing import Iterator
+from typing import Iterator,List
 import os.path
 
 
 class LivnehData:
     DATA_ROOT = "./data/input/"
+    RESOLUTION = 1/16
+    YEARS: List[int] = list(range(1915, 2012))
 
     @classmethod
     def input_file(cls, year: int) -> str:

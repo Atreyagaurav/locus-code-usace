@@ -15,9 +15,6 @@ import src.precip as precip
 from src.huc import HUC
 
 
-YEARS: List[int] = list(range(1915, 2012))
-
-
 class CliAction(Enum):
     """Actions that can be performed in a basin with HUCode
 
@@ -29,8 +26,9 @@ class CliAction(Enum):
     CALCULATE_WEIGHTS = 0
     EXTRACT_ANNUAL_TIMESERIES = 1
     AMS_AND_PDS = 2
-    PLOT_CLUSTERS = 3
-    BATCH_PROCESS = 4
+    FIND_CLUSTERS = 3
+    PLOT_CLUSTERS = 4
+    BATCH_PROCESS = 5
 
 
 def calculate_weights(huc: HUC, args):
@@ -39,85 +37,58 @@ def calculate_weights(huc: HUC, args):
 
 
 def extract_annual_timeseries(huc: HUC, args):
-    huc.load_timeseries(YEARS)
+    huc.load_timeseries(LivnehData.YEARS)
     return
 
 
 def ams_and_pds(huc: HUC, args):
     ndays = args.num_days
-    precip.load_ams_grids(huc, YEARS, ndays)
+    precip.load_ams_grids(huc, LivnehData.YEARS, ndays)
     threshold = _get_threhold(huc, ndays)
-    precip.load_pds_grids(huc, YEARS, ndays, threshold)
+    precip.load_pds_grids(huc, LivnehData.YEARS, ndays, threshold)
     return
 
 
-def _get_threhold(huc: HUC, ndays) -> float:
-    ams = precip.load_ams_series(huc, YEARS, ndays)
-    return ams.p_mm.min()
+def find_clusters(huc: HUC, args):
+    for series in args.series.split("+"):
+        cluster.cluster_means(huc, series, args.num_days)
 
 
 def plot_clusters(huc: HUC, args):
     ndays = args.num_days
-    series = args.series
-    if series == "ams":
-        grids = precip.load_ams_grids(huc, YEARS, ndays)
-    elif series == "pds":
-        threshold = _get_threhold(huc, ndays)
-        grids = precip.load_pds_grids(huc, YEARS, ndays, threshold)
-    elif series == "both":
-        args.series = "ams"
-        plot_clusters(huc, args)
-        args.series = "pds"
-        plot_clusters(huc, args)
-        return
-    else:
-        return
-
-    df_clustered = cluster.storm_centers(grids)
-    ids = pd.read_csv(huc.data_path("ids.csv"), index_col="ids")
-    shift = 1 / 32
-    geometry = [
-        shapely.box(lon - shift, lat - shift, lon + shift, lat + shift)
-        for lat, lon in zip(ids["lat"], ids["lon"])
-    ]
-    ids = gpd.GeoDataFrame(ids, geometry=geometry)
-    ids.set_index(pd.Index(ids.index, dtype=int), inplace=True)
-    means = df_clustered.groupby("cluster").mean().T
-    cluster_means = ids.join(
-        means.set_index(pd.Index(means.index.map(float), dtype=int))
-    )
-    nclusters = len(df_clustered.cluster.unique())
-    maximum = (
-        math.ceil(cluster_means.loc[:, list(
-            range(nclusters))].max().max() / 10) * 10
-    )
-    minimum = (
-        math.floor(cluster_means.loc[:, list(
-            range(nclusters))].min().min() / 10) * 10
-    )
-
-    plt.subplots_adjust(
-        **{k: 0.01 for k in ["left", "bottom"]},
-        **{k: 0.99 for k in ["top", "right"]},
-        **{k: 0.1 for k in ["wspace", "hspace"]},
-    )
-    fig, axs = plt.subplots(
-        nrows=2,
-        ncols=nclusters,
-        figsize=(5 * nclusters, 12),
-        sharex=True,
-        sharey=True
-    )
-    for i in range(nclusters):
-        cluster_means.plot(
-            ax=axs[0, i], column=i, vmin=minimum, vmax=maximum, legend=True
+    for series in args.series.split("+"):
+        cluster_means = cluster.cluster_means(huc, series, ndays)
+        clusters = [c for c in cluster_means.columns if c.startswith("C-")]
+        nclusters = len(clusters)
+        maximum = (
+            math.ceil(cluster_means.loc[:, clusters].max().max() / 10) * 10
         )
-        cluster_means.plot(ax=axs[1, i], column=i, legend=True)
-        axs[0, i].set_title(f"cluster: {i}")
-        axs[1, i].set_title(f"cluster: {i}")
-    plt.suptitle(f"Precipitation Patterns in {huc}")
-    plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
-    print(":", huc.image_path(f"{series}_{ndays}dy.png"))
+        minimum = (
+            math.floor(cluster_means.loc[:, clusters].min().min() / 10) * 10
+        )
+
+        plt.subplots_adjust(
+            **{k: 0.01 for k in ["left", "bottom"]},
+            **{k: 0.99 for k in ["top", "right"]},
+            **{k: 0.1 for k in ["wspace", "hspace"]},
+        )
+        fig, axs = plt.subplots(
+            nrows=2,
+            ncols=nclusters,
+            figsize=(5 * nclusters, 12),
+            sharex=True,
+            sharey=True
+        )
+        for i, clus in enumerate(sorted(clusters)):
+            cluster_means.plot(
+                ax=axs[0, i], column=clus, vmin=minimum, vmax=maximum, legend=True
+            )
+            cluster_means.plot(ax=axs[1, i], column=clus, legend=True)
+            axs[0, i].set_title(f"cluster: {clus}")
+            axs[1, i].set_title(f"cluster: {clus}")
+        plt.suptitle(f"Precipitation Patterns in {huc}")
+        plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
+        print(":", huc.image_path(f"{series}_{ndays}dy.png"))
 
 
 def cli_parser():
@@ -155,8 +126,8 @@ def cli_parser():
     parser.add_argument(
         "-s",
         "--series",
-        choices=["ams", "pds", "both"],
-        default="both",
+        choices=["ams", "pds", "ams+pds"],
+        default="ams+pds",
         help="ams or pds event to plot",
     )
     for act in CliAction:
