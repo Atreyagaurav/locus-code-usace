@@ -1,18 +1,15 @@
 """A command line entry point for the locus analysis"""
 import argparse
-import geopandas as gpd
 import math
 import matplotlib.pyplot as plt
-import pandas as pd
-import shapely
 import time
 from enum import Enum
 from datetime import datetime
-from typing import List
 
 import src.cluster as cluster
 import src.precip as precip
 from src.huc import HUC
+from src.livneh import LivnehData
 
 
 class CliAction(Enum):
@@ -43,49 +40,45 @@ def extract_annual_timeseries(huc: HUC, args):
 
 def ams_and_pds(huc: HUC, args):
     ndays = args.num_days
-    precip.load_ams_grids(huc, LivnehData.YEARS, ndays)
-    threshold = _get_threhold(huc, ndays)
-    precip.load_pds_grids(huc, LivnehData.YEARS, ndays, threshold)
+    precip.load_ams_series(huc, ndays)
+    threshold = precip.get_threhold(huc, ndays)
+    precip.load_pds_series(huc, ndays, threshold)
     return
 
 
 def find_clusters(huc: HUC, args):
     for series in args.series.split("+"):
-        cluster.cluster_means(huc, series, args.num_days)
+        cluster.cluster_weights(huc, series, args.num_days)
 
 
 def plot_clusters(huc: HUC, args):
     ndays = args.num_days
     for series in args.series.split("+"):
-        cluster_means = cluster.cluster_means(huc, series, ndays)
-        clusters = [c for c in cluster_means.columns if c.startswith("C-")]
-        nclusters = len(clusters)
-        maximum = (
-            math.ceil(cluster_means.loc[:, clusters].max().max() / 10) * 10
-        )
-        minimum = (
-            math.floor(cluster_means.loc[:, clusters].min().min() / 10) * 10
-        )
+        cluster_means = cluster.cluster_weights(huc, series, ndays).prec
+        nclusters = len(cluster_means.cluster)
+        maximum = math.ceil(cluster_means.max() / 10) * 10
+        minimum = math.floor(cluster_means.min() / 10) * 10
 
         plt.subplots_adjust(
-            **{k: 0.01 for k in ["left", "bottom"]},
-            **{k: 0.99 for k in ["top", "right"]},
-            **{k: 0.1 for k in ["wspace", "hspace"]},
+            **{k: 0.06 for k in ["left", "bottom"]},
+            **{k: 0.94 for k in ["top", "right"]},
+            **{k: 0.2 for k in ["wspace", "hspace"]},
         )
         fig, axs = plt.subplots(
             nrows=2,
             ncols=nclusters,
             figsize=(5 * nclusters, 12),
             sharex=True,
-            sharey=True
+            sharey=True,
+            squeeze=True
         )
-        for i, clus in enumerate(sorted(clusters)):
-            cluster_means.plot(
-                ax=axs[0, i], column=clus, vmin=minimum, vmax=maximum, legend=True
+        for i in range(nclusters):
+            cluster_means[:, :, i].plot(
+                ax=axs[0, i], vmin=minimum, vmax=maximum,
             )
-            cluster_means.plot(ax=axs[1, i], column=clus, legend=True)
-            axs[0, i].set_title(f"cluster: {clus}")
-            axs[1, i].set_title(f"cluster: {clus}")
+            cluster_means[:, :, i].plot(ax=axs[1, i])
+            axs[0, i].set_aspect("equal")
+            axs[1, i].set_aspect("equal")
         plt.suptitle(f"Precipitation Patterns in {huc}")
         plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
         print(":", huc.image_path(f"{series}_{ndays}dy.png"))
@@ -124,7 +117,7 @@ def cli_parser():
         help="print basin details and exit"
     )
     parser.add_argument(
-        "-s",
+        "-S",
         "--series",
         choices=["ams", "pds", "ams+pds"],
         default="ams+pds",

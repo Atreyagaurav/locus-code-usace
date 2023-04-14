@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 import os
-import shapely
+import xarray
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -50,23 +49,13 @@ def normalize_cluster(df: pd.DataFrame, ids: pd.DataFrame):
 
 
 def cluster_means(huc: HUC, series, ndays):
-    filename = huc.data_path(f"clusters-means_{series}_{ndays}day.shp")
-    if os.path.exists(filename):
-        return gpd.read_file(filename)
-
     if series == "ams":
-        grids = precip.load_ams_grids(huc, LivnehData.YEARS, ndays)
+        grids = precip.load_ams_grids(huc, ndays)
     elif series == "pds":
         threshold = precip.get_threhold(huc, ndays)
-        grids = precip.load_pds_grids(huc, LivnehData.YEARS, ndays, threshold)
+        grids = precip.load_pds_grids(huc, ndays, threshold)
 
     ids = pd.read_csv(huc.data_path("ids.csv"), index_col="ids")
-    shift = LivnehData.RESOLUTION / 2
-    geometry = [
-        shapely.box(lon - shift, lat - shift, lon + shift, lat + shift)
-        for lat, lon in zip(ids["lat"], ids["lon"])
-    ]
-    ids = gpd.GeoDataFrame(ids, geometry=geometry)
     ids.set_index(pd.Index(ids.index, dtype=int), inplace=True)
 
     # cluster details
@@ -78,7 +67,6 @@ def cluster_means(huc: HUC, series, ndays):
     cluster_means = ids.join(
         means.set_index(pd.Index(means.index.map(float), dtype=int))
     )
-    cluster_means.to_file(filename)
     weights = huc.weights.to_dataframe().dropna()
     weights.set_index(pd.Index(weights.ids, dtype=int), inplace=True)
     summary = pd.DataFrame(
@@ -86,7 +74,7 @@ def cluster_means(huc: HUC, series, ndays):
         index=sorted(df_clustered.cluster.unique()),
         columns=["precip", "count"])
     for ind in summary.index:
-        grid_precip = cluster_means.loc[:,[ind]]
+        grid_precip = cluster_means.loc[:, [ind]]
         grid_precip = grid_precip.join(weights.weights)
         prec = grid_precip.weights * grid_precip.loc[:, ind]
         summary.loc[ind, "precip"] = prec.sum()
@@ -94,3 +82,29 @@ def cluster_means(huc: HUC, series, ndays):
     summary.to_csv(
         huc.data_path(f"clusters-summary-{series}_{ndays}day.csv"))
     return cluster_means
+
+
+def cluster_weights(huc: HUC, series, ndays):
+    filename = huc.data_path(f"clusters-weights_{series}_{ndays}day.nc")
+    if os.path.exists(filename):
+        return xarray.open_dataset(filename)
+    means = cluster_means(huc, series, ndays)
+    clusters = [c for c in means.columns if c.startswith("C-")]
+    clusters_wt = xarray.Dataset(coords=huc.weights.coords).assign_coords(
+        {"cluster": clusters}
+    )
+    clusters_wt["prec"] = xarray.DataArray(np.nan, coords=clusters_wt.coords)
+    ids2latlon = {v:k for k,v in huc.weights.ids.to_series().dropna().to_dict().items()}
+    lat_ind = {v:i for i,v in enumerate(clusters_wt.lat.to_numpy())}
+    lon_ind = {v:i for i,v in enumerate(clusters_wt.lon.to_numpy())}
+    clus_ind = {v:i for i,v in enumerate(clusters_wt.cluster.to_numpy())}
+    for c in clusters:
+        cluster_slice = means.loc[:, ["lat", "lon", c]].dropna()
+        for i,row in cluster_slice.iterrows():
+            ind = lat_ind[row.lat],lon_ind[row.lon],clus_ind[c]
+            clusters_wt.prec[ind] = row.loc[c]
+    clusters_wt["w_prec"] = clusters_wt.prec * huc.weights.weights
+    clusters_wt["weights"] = clusters_wt.prec / clusters_wt.prec.sum(dim=["lat", "lon"])
+    clusters_wt.to_netcdf(filename)
+    return clusters_wt
+
