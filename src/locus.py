@@ -34,7 +34,7 @@ def calculate_weights(huc: HUC, args):
 
 
 def extract_annual_timeseries(huc: HUC, args):
-    huc.load_timeseries(LivnehData.YEARS)
+    huc.load_timeseries()
     return
 
 

@@ -149,50 +149,34 @@ class HUC:
         """
         return os.path.join(f"./images/{self.huc_code}", filename)
 
-    def load_timeseries(self, years: List[int]) -> pd.DataFrame:
+    def load_timeseries(self) -> pd.DataFrame:
         """timeseries of the precipitation for given years.
 
         loads it using `load_annual_timeseries` for all the years and
         then concatenates the data
 
-        :param years: years of record for timeseries
-        :type years: List[int]
         :returns: dataframe with index 'time' containing iso formatted
                   dates and a column 'prec'
 
         """
-        return pd.concat(self.load_annual_timeseries(y) for y in years)
+        filename = self.data_path("prec.csv")
+        if os.path.exists(filename):
+            return pd.read_csv(filename, index_col="time")
+        else:
+            df = self.process_timeseries()
+            df.to_csv(filename)
+            return df
 
-    def rolling_timeseries(self, years: List[int], ndays: int) -> pd.DataFrame:
+    def rolling_timeseries(self, ndays: int) -> pd.DataFrame:
         """same as load_timeseries but for rolling sum for multiple days
 
-        :param years: years of record for timeseries
-        :type years: List[int]
         :param ndays: number of days to collect the precipitation for
         :type ndays: int
         :returns: dataframe with index 'time' containing iso formatted dates
                   and a column 'prec'
 
         """
-        return self.load_timeseries(years).rolling(ndays, min_periods=1).sum()
-
-    def load_annual_timeseries(self, year: int) -> pd.DataFrame:
-        """annual timeseries of a specific year
-
-        loads it from local storage, if not found then does
-        `process_annual_timeseries` to evaluate it.
-
-        :param year: year of interest
-        :type year: int
-        :returns: dataframe with index 'time' containing iso formatted dates
-                  and a column 'prec'
-
-        """
-        filename = self.data_path(f"prec.{year}.csv")
-        if os.path.exists(filename):
-            return pd.read_csv(filename, index_col="time")
-        else:
-            return self.process_annual_timeseries(year)
+        return self.load_timeseries().rolling(ndays, min_periods=1).sum()
 
     def get_gridded_df(self, dates: List[datetime]) -> pd.DataFrame:
         """timeseries with each grids' values and weights for given dates
@@ -232,27 +216,26 @@ class HUC:
 
         return pd.concat(get_df(y, j) for y, j in year_julian)
 
-    def process_annual_timeseries(self, year: int) -> pd.DataFrame:
+    def process_timeseries(self) -> pd.DataFrame:
         """process the annual timeseries for a year and save it
 
         if weights for the LivnehData is unknown for the basin it'll
         run `calculate_weights`
 
-        :param year: year of interest
-        :type year: int
         :returns: pandas dataframe with time (iso formatted date) as index and
                   prec column with precipitation
 
         """
         if self.weights is None:
             self.calculate_weights()
-        netCDF = xarray.open_dataset(LivnehData.input_file(year))
-        weighted = (netCDF.prec * self.weights.weights).sum(dim=["lat", "lon"])
-        weighted.name = "prec"
-        df = weighted.to_dataframe()
-        df.to_csv(self.data_path(f"prec.{year}.csv"))
-        print(":", self.data_path(f"prec.{year}.csv"))
-        return df
+
+        def get_df(year):
+            netCDF = xarray.open_dataset(LivnehData.input_file(year))
+            weighted = (netCDF.prec * self.weights.weights).sum(dim=["lat", "lon"])
+            weighted.name = "prec"
+            return weighted.to_dataframe()
+
+        return pd.concat(map(get_df, LivnehData.YEARS))
 
     def load_weights(self, /, calculate: bool = False):
         """load weights of cells in LivnehData for the basin

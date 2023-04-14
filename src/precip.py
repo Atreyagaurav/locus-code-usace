@@ -1,13 +1,10 @@
-from typing import List
-
 import pandas as pd
 from src.huc import HUC
-from src.livneh import LivnehData
 from datetime import timedelta
 
 
-def calculate_ams_series(huc: HUC, years: List[int], ndays: int) -> pd.DataFrame:
-    basin = huc.rolling_timeseries(years, ndays)
+def calculate_ams_series(huc: HUC, ndays: int) -> pd.DataFrame:
+    basin = huc.rolling_timeseries(ndays)
     year = pd.DatetimeIndex(basin.index).year
     series = basin[basin == basin.groupby(year).transform(max)].dropna()
     ams_series = (
@@ -25,11 +22,11 @@ def load_ams_series(huc: HUC, ndays: int) -> pd.DataFrame:
     try:
         return pd.read_csv(huc.data_path(f"ams_{ndays}dy_series.csv"))
     except FileNotFoundError:
-        return calculate_ams_series(huc, LivnehData.YEARS, ndays)
+        return calculate_ams_series(huc, ndays)
 
 
 def calculate_pds_series(huc: HUC, ndays: int, threshold: float) -> pd.DataFrame:
-    basin = huc.rolling_timeseries(LivnehData.YEARS, ndays)
+    basin = huc.rolling_timeseries(ndays)
     series = basin[basin.prec > threshold].dropna()
     pds_series = (
         pd.DataFrame({"p_mm": series.prec, "end_date": series.index})
