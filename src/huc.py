@@ -278,22 +278,21 @@ class HUC:
         )
         latlon = pd.Series(itertools.product(lats, lons))
         shift = LivnehData.RESOLUTION / 2
+
         geometry = [
-            shapely.box(lon - shift, lat - shift, lon + shift, lat + shift)
+            shapely.ops.clip_by_rect(self.geometry,
+                                     lon - shift, lat - shift,
+                                     lon + shift, lat + shift)
             for ((_, lat), (_, lon)) in latlon
         ]
-
-        mask = self.geometry_as_geodataframe()
-        geom_unclip = gpd.GeoDataFrame(
-            index=latlon, geometry=geometry, crs=mask.crs)
-        geom_unclip.set_geometry("geometry", inplace=True)
-        # can be further sped up if we simplify the mask layer
-        clipped = gpd.clip(geom_unclip, mask,
-                           keep_geom_type=False).to_crs(HUC.AREA_CRS)
-        area: pd.Series = clipped.geometry.map(lambda g: g.area / 1_000_000)
-        self._set_and_save_weights(
-            area, template=netCDF.prec.isel(time=0).drop_vars("time")
+        clipped = gpd.GeoDataFrame(
+            index=latlon, geometry=geometry, crs=HUC.SOURCE_CRS)
+        clipped = clipped.loc[clipped.geometry.map(lambda g: not g.is_empty)].to_crs(
+            HUC.AREA_CRS
         )
+        area: pd.Series = clipped.geometry.map(lambda g: g.area / 1_000_000)
+        template = netCDF.prec.isel(time=0).drop_vars("time")
+        self._set_and_save_weights(area, template=template)
 
     def _set_and_save_weights(self, area: pd.Series, /, template):
         areas = xarray.zeros_like(template)
