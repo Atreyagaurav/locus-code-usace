@@ -7,7 +7,6 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from kneed import KneeLocator
 
-from src.livneh import LivnehData
 from src.huc import HUC
 import src.precip as precip
 
@@ -21,7 +20,8 @@ def storm_centers(df: pd.DataFrame):
 
 def dimensionality_reduction(df: pd.DataFrame):
     pca = PCA(n_components=20)
-    return pca.fit_transform(StandardScaler().fit_transform(df.to_numpy()))
+    df_norm = df.apply(lambda row: row / row.sum(), axis=1)
+    return pca.fit_transform(df_norm.to_numpy())
 
 
 def clustering(m: np.ndarray):
