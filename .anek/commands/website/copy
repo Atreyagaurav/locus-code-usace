@@ -1,0 +1,1 @@
+mkdir -p ~/github/atreyagaurav.github.io/locus/{huc}-{name} && cp data/output/{huc}/map-ams-1day.html data/output/{huc}/map-pds-1day.html ~/github/atreyagaurav.github.io/locus/{huc}-{name}/
