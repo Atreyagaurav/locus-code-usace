@@ -10,6 +10,7 @@ import src.cluster as cluster
 import src.precip as precip
 from src.huc import HUC
 from src.livneh import LivnehData
+from src.map import generate_map
 
 
 class CliAction(Enum):
@@ -25,7 +26,8 @@ class CliAction(Enum):
     AMS_AND_PDS = 2
     FIND_CLUSTERS = 3
     PLOT_CLUSTERS = 4
-    BATCH_PROCESS = 5
+    MAP_WEIGHTS = 5
+    BATCH_PROCESS = -1
 
 
 def calculate_weights(huc: HUC, args):
@@ -49,6 +51,11 @@ def ams_and_pds(huc: HUC, args):
 def find_clusters(huc: HUC, args):
     for series in args.series.split("+"):
         cluster.cluster_weights(huc, series, args.num_days)
+
+
+def map_weights(huc: HUC, args):
+    for series in args.series.split("+"):
+        generate_map(huc, series, args.num_days)
 
 
 def plot_clusters(huc: HUC, args):
