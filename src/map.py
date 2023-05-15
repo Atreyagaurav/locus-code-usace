@@ -34,6 +34,8 @@ def generate_map(huc: HUC, series: str, nday: int):
         [bbox[3], bbox[2]],
     ]
 
+    map.fit_bounds(bounds)
+
     clusters = xarray.open_dataset(
         huc.data_path(f"clusters-weights_{series}_{nday}day.nc")
     )
