@@ -8,19 +8,19 @@ import folium.features
 from src.huc import HUC
 from src.livneh import LivnehData
 
+# from jinja2 import Template
+
+
+# # to override the default folium template
+# with open("./templates/map.htm", "r") as reader:
+#     folium.Map._template = Template(reader.read())
+
 
 def generate_map(huc: HUC, series: str, nday: int):
     bbox = huc.buffered_bbox()
     center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]
 
-    map = folium.Map(
-        location=center,
-        min_lat=bbox[1],
-        min_lon=bbox[0],
-        max_lon=bbox[2],
-        max_lat=bbox[3],
-    )
-
+    map = folium.Map(location=center)
     tl2 = folium.TileLayer()
     tl2.add_to(map)
 
@@ -28,10 +28,13 @@ def generate_map(huc: HUC, series: str, nday: int):
 
     folium.GeoJson(huc.geometry_as_geodataframe().to_json()).add_to(basin_fg)
 
-    bbox = huc.buffered_bbox(buffer=LivnehData.RESOLUTION / 2)
+    min_lat = float(huc.weights.weights.lat.min()) - LivnehData.RESOLUTION / 2
+    max_lat = float(huc.weights.weights.lat.max()) + LivnehData.RESOLUTION / 2
+    min_lon = float(huc.weights.weights.lon.min()) - LivnehData.RESOLUTION / 2
+    max_lon = float(huc.weights.weights.lon.max()) + LivnehData.RESOLUTION / 2
     bounds = [
-        [bbox[1], bbox[0]],
-        [bbox[3], bbox[2]],
+        [min_lat, min_lon - 360],
+        [max_lat, max_lon - 360],
     ]
 
     map.fit_bounds(bounds)
