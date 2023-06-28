@@ -11,7 +11,7 @@ import src.precip as precip
 from src.huc import HUC
 from src.livneh import LivnehData
 from src.map import generate_map
-
+from src.subbasins import subbasins_gdf
 
 class CliAction(Enum):
     """Actions that can be performed in a basin with HUCode
@@ -26,7 +26,8 @@ class CliAction(Enum):
     AMS_AND_PDS = 2
     FIND_CLUSTERS = 3
     PLOT_CLUSTERS = 4
-    MAP_WEIGHTS = 5
+    SUBBASINS_PLOT_CLUSTERS = 5
+    MAP_WEIGHTS = 6
     BATCH_PROCESS = -1
 
 
@@ -89,6 +90,41 @@ def plot_clusters(huc: HUC, args):
         plt.suptitle(f"Precipitation Patterns in {huc}")
         plt.savefig(huc.image_path(f"{series}_{ndays}dy.png"))
         print(":", huc.image_path(f"{series}_{ndays}dy.png"))
+
+
+def subbasins_plot_clusters(huc: HUC, args):
+    ndays = args.num_days
+    for series in args.series.split("+"):
+        clusters = subbasins_gdf(huc, series, ndays)
+        clus_names = [c for c in clusters.columns if c.startswith("C-")]
+        nclusters = len(clus_names)
+        maximum = math.ceil(clusters.loc[:, clus_names].max().max() * 20) / 20
+        # minimum = math.floor(clusters.loc[:, clus_names].min().min() * 20) / 20
+        minimum = 0.0
+
+        plt.subplots_adjust(
+            **{k: 0.06 for k in ["left", "bottom"]},
+            **{k: 0.94 for k in ["top", "right"]},
+            **{k: 0.2 for k in ["wspace", "hspace"]},
+        )
+        fig, axs = plt.subplots(
+            nrows=2,
+            ncols=nclusters,
+            figsize=(5 * nclusters, 12),
+            sharex=True,
+            sharey=True,
+            squeeze=True
+        )
+        for i in range(nclusters):
+            clusters.plot(clus_names[i],
+                ax=axs[0, i], vmin=minimum, vmax=maximum,
+            )
+            clusters.plot(clus_names[i], ax=axs[1, i])
+            axs[0, i].set_aspect("equal")
+            axs[1, i].set_aspect("equal")
+        plt.suptitle(f"Precipitation Patterns in {huc}")
+        plt.savefig(huc.image_path(f"subbains_{series}_{ndays}dy.png"))
+        print(":", huc.image_path(f"subbains_{series}_{ndays}dy.png"))
 
 
 def cli_parser():
