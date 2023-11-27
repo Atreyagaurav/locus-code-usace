@@ -1,0 +1,5 @@
+# FIXME this is too simple fix it later
+rm data/output/{name}
+rm images/{name}
+ln -s {huc} data/output/{name}
+ln -s {huc} images/{name}
