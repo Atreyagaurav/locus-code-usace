@@ -5,16 +5,16 @@ river_name=`echo $2 | tr '[:lower:]' '[:upper:]'`
 dss_file=${src_file%.*}.dss
 src_filename=`basename ${src_file}`
 ext=${src_file##*.}
-tmp_dir=${src_file%.*}.d
-mkdir -p $tmp_dir
-# tmp_dir=`mktemp -d`
+# tmp_dir=${src_file%.*}.d
+# mkdir -p $tmp_dir
+tmp_dir=`mktemp -d`
 tmp_file=${tmp_dir}/${src_filename%.*}
 warped_file=${tmp_file}-wrapped.${ext}
 
 
 fractions=(0.011 0.011 0.012 0.014 0.015 0.017 0.018 0.022 0.027 0.034 0.054 0.428 0.109 0.048 0.034 0.026 0.023 0.019 0.016 0.014 0.012 0.012 0.012 0.012)
 
-gdalwarp -s_srs WGS84 -t_srs hec-abers.prj -dstnodata 0 -tr 2000 2000 -r average $src_file $warped_file
+gdalwarp -s_srs WGS84 -t_srs hec-abers.prj -tr 2000 2000 -r average $src_file $warped_file
 
 count=0
 count2=1
@@ -24,9 +24,9 @@ for frac in ${fractions[@]}; do
     if [ ! -f "$calc_file" ]; then
         gdal_calc.py --calc "a * ${frac} * 50" -a $warped_file --outfile $calc_file
     fi
-    gdal_translate -of aaigrid netcdf:$calc_file $asc_file
+    gdal_translate -of aaigrid -a_nodata 0 netcdf:$calc_file $asc_file
     (( count++ ))
     (( count2++ ))
 done;
 csv2dss g $dss_file ${tmp_dir}/SHG_${river_name}_PRECIP*.asc
-# rm -r $tmp_dir
+rm -r $tmp_dir
