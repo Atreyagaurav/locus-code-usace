@@ -48,22 +48,32 @@ def normalize_cluster(df: pd.DataFrame, ids: pd.DataFrame):
     return df
 
 
-def cluster_means(huc: HUC, series, ndays):
+
+def clustered_df(huc: HUC, series, ndays):
     if series == "ams":
         grids = precip.load_ams_grids(huc, ndays)
     elif series == "pds":
         threshold = precip.get_threhold(huc, ndays)
         grids = precip.load_pds_grids(huc, ndays, threshold)
+    df_fname = huc.data_path(f"clusters-{series}_{ndays}day.csv")
+    try:
+        cluster = pd.read_csv(df_fname, index_col="end_date")
+        return grids.join(cluster)
+    except FileNotFoundError:
+        # cluster details
+        df_clustered = storm_centers(grids)
+        df_clustered.cluster = df_clustered.cluster.map(lambda c: f"C-{c+1}")
+        df_clustered.cluster.to_csv(df_fname)
+        return df_clustered
+
+
+def cluster_means(huc: HUC, series, ndays):
+    df_clustered = clustered_df(huc, series, ndays)
+    means = df_clustered.groupby("cluster").mean().T
 
     ids = pd.read_csv(huc.data_path("ids.csv"), index_col="ids")
     ids.set_index(pd.Index(ids.index, dtype=int), inplace=True)
 
-    # cluster details
-    df_clustered = storm_centers(grids)
-    df_clustered.cluster = df_clustered.cluster.map(lambda c: f"C-{c+1}")
-    df_clustered.cluster.to_csv(
-        huc.data_path(f"clusters-{series}_{ndays}day.csv"))
-    means = df_clustered.groupby("cluster").mean().T
     cluster_means = ids.join(
         means.set_index(pd.Index(means.index.map(float), dtype=int))
     )

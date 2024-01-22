@@ -1,0 +1,75 @@
+#+title: Updates for Locus Code
+#+author: Gaurav Atreya
+#+options: toc:nil
+* General Updates
+I further optimized the spatial processing part, the calculation of weights is now even faster, here is the [[https://github.com/Atreyagaurav/locus-code-usace/commit/e63b73803561fc0b736c5143e65106f7c6300bec][Github Commit Link]].
+
+Current times are (in my laptop for ohio): 18 sec weights calculation; 95 sec (1.6 min) timeseries extraction; <.05 sec AMS and PDS identification; 40 sec clustering; 2.5 sec plotting. With total of 2.5 minutes. That time comes down to just 2 minutes when processing trinity, and 1.5 minutes being spent on the timeseries extraction. So, this is disc bound, and we could probably speed it up with removing the disc IO into the netcdf files, but it'd require a lot of rewrite.
+
+I've looked at the performance profiles and I don't think we can further optimize it in python. Or at least will take serious effort. The code is still slow if we want to process thousands of basins (e.g. there are 2,413 HUC 8 basins, the number becomes very large if we go even smaller).
+
+*INTERACTIVE MAP*: https://atreyagaurav.github.io/locus/index.html
+
+I'll run it for at least HUC01-HUC18 and put it here. Possibly HUC4s too.
+* Normalizing before Clusters
+** Changed Code
+I changed this part of the code to normalize each rows. Here I removed the normal assumption of the data as the precipitation data is heavily skewed (not close to normal). And I just divided all the precipitation values of cells with the total basin weighted precipitation on that event (day).
+
+#+begin_src sh :results output :cache yes :exports results :wrap src diff
+  git show 4c141e2
+#+end_src
+
+#+RESULTS[63095cb5352fd288f7fbad30f64aa361a4521cdf]:
+#+begin_src diff
+commit 4c141e264d3ce656772411fec74000456f3ceea4
+Author: Gaurav Atreya <allmanpride@gmail.com>
+Date:   Sun Apr 30 22:30:31 2023 -0400
+
+    Normalize by total rain volume before clustering
+
+diff --git a/images/05/ams_1dy.png b/images/05/ams_1dy.png
+index e98d9f7..a3ebca6 100644
+Binary files a/images/05/ams_1dy.png and b/images/05/ams_1dy.png differ
+diff --git a/images/05/pds_1dy.png b/images/05/pds_1dy.png
+index ba44651..ecf3ed2 100644
+Binary files a/images/05/pds_1dy.png and b/images/05/pds_1dy.png differ
+diff --git a/src/cluster.py b/src/cluster.py
+index 8b5731c..f9267d4 100644
+--- a/src/cluster.py
++++ b/src/cluster.py
+@@ -7,7 +7,6 @@ from sklearn.decomposition import PCA
+ from sklearn.cluster import KMeans
+ from kneed import KneeLocator
+ 
+-from src.livneh import LivnehData
+ from src.huc import HUC
+ import src.precip as precip
+ 
+@@ -21,7 +20,8 @@ def storm_centers(df: pd.DataFrame):
+ 
+ def dimensionality_reduction(df: pd.DataFrame):
+     pca = PCA(n_components=20)
+-    return pca.fit_transform(StandardScaler().fit_transform(df.to_numpy()))
++    df_norm = df.apply(lambda row: row / row.sum(), axis=1)
++    return pca.fit_transform(df_norm.to_numpy())
+ 
+ 
+ def clustering(m: np.ndarray):
+#+end_src
+
+** Observations
+
+The plots of the clusters before that can be seen in Figure [[fig:clus-old]] and the one from new algorithm can be seen in Figure [[fig:clus-new]].
+
+The old one has distinct preference of higher magnitude of rain in certain clusters while lower in other, but new one doesn't show that bias. So it's not as overwhelmed by the magnitude of rain like the previous one.
+
+Note: The new ones show a few more points which was my mistake originally as I didn't include 2011 (I forgot python range is exclusive, i.e. I used =range(1915,2011)= instead of =range(1915,2012)=).
+
+
+#+name: fig:clus-old
+#+caption: Cluster characteristics from old algorithm
+[[./manual-images/clusters-ohio.png]]
+
+#+name: fig:clus-new
+#+caption: Cluster characteristics from new algorithm
+[[./manual-images/clusters-ohio-new.png]]
