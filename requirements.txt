@@ -3,3 +3,4 @@ geopandas
 xarray
 netcdf4
 kneed
+lmfit
