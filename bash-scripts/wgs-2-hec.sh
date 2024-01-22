@@ -7,9 +7,9 @@ dss_file=${src_file%.*}.dss
 zip_file=${src_file%.*}.zip
 src_filename=`basename ${src_file}`
 ext=${src_file##*.}
-tmp_dir=${src_file%.*}.d
-mkdir -p $tmp_dir
-# tmp_dir=`mktemp -d`
+# tmp_dir=${src_file%.*}.d
+# mkdir -p $tmp_dir
+tmp_dir=`mktemp -d`
 tmp_file=${tmp_dir}/${src_filename%.*}
 warped_file=${tmp_file}-wrapped.${ext}
 
