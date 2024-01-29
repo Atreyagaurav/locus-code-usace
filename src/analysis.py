@@ -28,7 +28,7 @@ ams = ams.set_index("end_date")
 ams.index.name = "time"
 data = ams.join(precip.prec)
 params = pearson3.fit(data.prec)
-print("all:",pearson3.ppf(0.99, *params))
+print("all:", pearson3.ppf(0.99, *params))
 for c, data in data.groupby("cluster"):
     params = pearson3.fit(data.prec)
-    print(f"{c}:",pearson3.ppf(0.99, *params))
+    print(f"{c}:", pearson3.ppf(0.99, *params))

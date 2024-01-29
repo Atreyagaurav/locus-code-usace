@@ -8,10 +8,12 @@ from datetime import datetime
 
 import src.cluster as cluster
 import src.precip as precip
+import src.generate_netcdfs as ncgen
 from src.huc import HUC
 from src.livneh import LivnehData
 from src.map import generate_map
 from src.subbasins import subbasins_gdf
+
 
 class CliAction(Enum):
     """Actions that can be performed in a basin with HUCode
@@ -28,6 +30,7 @@ class CliAction(Enum):
     PLOT_CLUSTERS = 4
     SUBBASINS_PLOT_CLUSTERS = 5
     MAP_WEIGHTS = 6
+    GENERATE_NETCDFS = 7
     BATCH_PROCESS = -1
 
 
@@ -55,8 +58,7 @@ def find_clusters(huc: HUC, args):
 
 
 def map_weights(huc: HUC, args):
-    for series in args.series.split("+"):
-        generate_map(huc, series, args.num_days)
+    generate_map(huc)
 
 
 def plot_clusters(huc: HUC, args):
@@ -125,6 +127,14 @@ def subbasins_plot_clusters(huc: HUC, args):
         plt.suptitle(f"Precipitation Patterns in {huc}")
         plt.savefig(huc.image_path(f"subbains_{series}_{ndays}dy.png"))
         print(":", huc.image_path(f"subbains_{series}_{ndays}dy.png"))
+
+
+def generate_netcdfs(huc: HUC, args):
+    ncgen.generate_uniform_netcdf(huc)
+    ndays = args.num_days
+    for series in args.series.split("+"):
+        ncgen.generate_mean_netcdf(huc, series, ndays)
+        ncgen.generate_cluster_netcdfs(huc, series, ndays)
 
 
 def cli_parser():

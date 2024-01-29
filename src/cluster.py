@@ -48,7 +48,6 @@ def normalize_cluster(df: pd.DataFrame, ids: pd.DataFrame):
     return df
 
 
-
 def clustered_df(huc: HUC, series, ndays):
     if series == "ams":
         grids = precip.load_ams_grids(huc, ndays)
@@ -104,17 +103,16 @@ def cluster_weights(huc: HUC, series, ndays):
         {"cluster": clusters}
     )
     clusters_wt["prec"] = xarray.DataArray(np.nan, coords=clusters_wt.coords)
-    ids2latlon = {v:k for k,v in huc.weights.ids.to_series().dropna().to_dict().items()}
-    lat_ind = {v:i for i,v in enumerate(clusters_wt.lat.to_numpy())}
-    lon_ind = {v:i for i,v in enumerate(clusters_wt.lon.to_numpy())}
-    clus_ind = {v:i for i,v in enumerate(clusters_wt.cluster.to_numpy())}
+    ids2latlon = {v: k for k, v in huc.weights.ids.to_series().dropna().to_dict().items()}
+    lat_ind = {v: i for i, v in enumerate(clusters_wt.lat.to_numpy())}
+    lon_ind = {v: i for i, v in enumerate(clusters_wt.lon.to_numpy())}
+    clus_ind = {v: i for i, v in enumerate(clusters_wt.cluster.to_numpy())}
     for c in clusters:
         cluster_slice = means.loc[:, ["lat", "lon", c]].dropna()
-        for i,row in cluster_slice.iterrows():
-            ind = lat_ind[row.lat],lon_ind[row.lon],clus_ind[c]
+        for i, row in cluster_slice.iterrows():
+            ind = lat_ind[row.lat], lon_ind[row.lon], clus_ind[c]
             clusters_wt.prec[ind] = row.loc[c]
     clusters_wt["w_prec"] = clusters_wt.prec * huc.weights.weights
     clusters_wt["weights"] = clusters_wt.prec / clusters_wt.prec.sum(dim=["lat", "lon"])
     clusters_wt.to_netcdf(filename)
     return clusters_wt
-

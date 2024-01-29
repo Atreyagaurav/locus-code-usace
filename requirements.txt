@@ -1,4 +1,6 @@
+matplotlib
 pandas
+folium
 geopandas
 xarray
 netcdf4
