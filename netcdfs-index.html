@@ -4,50 +4,54 @@
 	<table id="tab-netcdfs" class="display" style="width:100%">
             <thead>
 		<tr>
+		    <th>File Name</th>
 		    <th>Basin Name</th>
 		    <th>HUC</th>
 		    <th>Series</th>
 		    <th>Duration</th>
 		    <th>Cluster</th>
-		    <th>Filesize</th>
-		    <th>Link</th>
-		    <th>Interactive Map</th>
+		    <th>Filesize (kB)</th>
 		</tr>
             </thead>
             <tfoot>
 		<tr>
+		    <th>File Name</th>
 		    <th>Basin Name</th>
 		    <th>HUC</th>
 		    <th>Series</th>
 		    <th>Duration</th>
 		    <th>Cluster</th>
-		    <th>Filesize</th>
-		    <th>Link</th>
-		    <th>Interactive Map</th>
+		    <th>Filesize (kB)</th>
 		</tr>
             </tfoot>
 	</table><link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.css" />
 	<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
 	<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.js"></script>
 	<script type="text/javascript" class="init">	 
-	 $(document).ready( function () {
-	     new DataTable('#tab-netcdfs', {
-		 ajax: 'netcdfs-index.json',
-		 columns: [
-		     {data: 'filename'},
-		     {data: 'huc_name'},
-		     {data: 'huc'},
-		     {data: 'series'},
-		     {data: 'duration'},
-		     {data: 'cluster'},
-		     {data: 'filesize'},
-		     {data: 'filename'},
-		     {data: 'huc'},
-		 ],
-		 processing: false,
-		 serverSide: false
-	     });
-	 });
+	    $(document).ready( function () {
+		$('#tab-netcdfs').DataTable({
+		    "ajax": '/netcdfs-index.json',
+		    columns: [
+			{data: 'filename'}, /* linked to /download/filename */
+			{data: 'huc_name'}, /* linked to /map/huc_name.html */
+			{data: 'huc'},
+			{data: 'series'},
+			{data: 'duration'},
+			{data: 'cluster'},
+			{data: 'filesize'},
+		    ],
+		    columnDefs: [
+			{
+			    render: (data, type, row) => '<a href="/download/' + data + '\">' + data + '</a>',
+			    targets: 0
+			},
+			{
+			    render: (data, type, row) => '<a href="/map/' + data + '.html\">' + data + '</a>',
+			    targets: 1
+			},
+		    ]
+		});
+	    });
 	</script>
     </body>
 </html>

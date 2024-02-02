@@ -6,9 +6,14 @@ import json
 
 huc_map = dict()
 
+print("Loading HUC2...")
 for huc, name in HUC.all_huc_codes(2):
     huc_map[name.replace(' ', '')] = huc
+print("Loading HUC4...")
 for huc, name in HUC.all_huc_codes(4):
+    huc_map[name.replace(' ', '')] = huc
+print("Loading HUC8...")
+for huc, name in HUC.all_huc_codes(8):
     huc_map[name.replace(' ', '')] = huc
 
 
@@ -27,7 +32,6 @@ class NcFile:
             self.series = parts[1][:3]
             self.duration = parts[1][3:]
         self.cluster = parts[2]
-        # bytes to MB
         self.filesize = os.path.getsize(filename)
 
     @classmethod
@@ -60,15 +64,26 @@ class NcFile:
         """
 
     def json(self):
-        dict(
+        return dict(
             filename=self.filename,
             huc_name=self.huc_name,
             huc=self.huc,
             series=self.series,
             duration=self.duration,
             cluster=self.cluster,
-            filesize=self.filesize,
+            filesize=f"{self.filesize / 1024:.1f}",
         )
+
+    def list(self):
+        return [
+            self.filename,
+            self.huc_name,
+            self.huc,
+            self.series,
+            self.duration,
+            self.cluster,
+            f"{self.filesize / 1024:.1f}",
+        ]
 
 
 files = [
@@ -77,9 +92,11 @@ files = [
 ]
 
 with open("netcdfs-index.json", "w") as w:
-    json.dump(dict(
-        draw=1,
-        recordsTotal=len(files),
-        recordsFiltered=len(files),
-        data=files,
-    ), w)
+    json.dump(
+        dict(
+            draw=1,
+            recordsTotal=len(files),
+            recordsFiltered=len(files),
+            data=files,
+        ),
+        w)
