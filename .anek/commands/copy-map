@@ -1,0 +1,1 @@
+cp data/output/{huc}/folium-map.html server/map/{huc}.html

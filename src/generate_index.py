@@ -8,13 +8,13 @@ huc_map = dict()
 
 print("Loading HUC2...")
 for huc, name in HUC.all_huc_codes(2):
-    huc_map[name.replace(' ', '')] = huc
+    huc_map[name.replace(' ', '')] = (huc, name)
 print("Loading HUC4...")
 for huc, name in HUC.all_huc_codes(4):
-    huc_map[name.replace(' ', '')] = huc
+    huc_map[name.replace(' ', '')] = (huc, name)
 print("Loading HUC8...")
 for huc, name in HUC.all_huc_codes(8):
-    huc_map[name.replace(' ', '')] = huc
+    huc_map[name.replace(' ', '')] = (huc, name)
 
 
 class NcFile:
@@ -23,8 +23,8 @@ class NcFile:
         name, _ = os.path.splitext(self.filename)
         # format HUC_NAME: HUCNAME_seriesNd_cluster_prec-100mm.nc
         parts = name.split("_")
-        self.huc_name = parts[0]
-        self.huc = huc_map[parts[0]]
+        self.huc = huc_map[parts[0]][0]
+        self.huc_name = huc_map[parts[0]][1]
         if parts[1] == "uniform":
             self.series = parts[1]
             self.duration = "NA"
