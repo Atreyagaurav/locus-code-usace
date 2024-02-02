@@ -28,10 +28,11 @@ class NcFile:
         if parts[1] == "uniform":
             self.series = parts[1]
             self.duration = "NA"
+            self.cluster = "NA"
         else:
             self.series = parts[1][:3]
             self.duration = parts[1][3:]
-        self.cluster = parts[2]
+            self.cluster = parts[2]
         self.filesize = os.path.getsize(filename)
 
     @classmethod
