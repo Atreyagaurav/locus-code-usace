@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+        <script>
+            L_NO_TOUCH = false;
+            L_DISABLE_3D = false;
+        </script>
+    
+    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+	  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+	  crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+	    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+	    crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <script
+	src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"
+	integrity="sha512-G4+fuKc1B96F0sUG7eKtgiJr0JM3iQC4bfc8WtYvmm7msHES0Hst2mLWASPb8zZk91tqMG86AjP0tgXIEFPPUA=="
+	crossorigin=""></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+             #tool-bar {
+                 position: relative;
+                 width: 100.0%;
+                 height: 10.0%;
+                 left: 0.0%;
+                 top: 0.0%;
+             }
+             #main-map {
+                 position: relative;
+                 width: 100.0%;
+                 height: 90.0%;
+                 left: 0.0%;
+                 top: 0.0%;
+             }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+        
+    
+                <style>
+                    .leaflet-image-layer {
+                        /* old android/safari*/
+                        image-rendering: -webkit-optimize-contrast;
+                        image-rendering: crisp-edges; /* safari */
+                        image-rendering: pixelated; /* chrome */
+                        image-rendering: -moz-crisp-edges; /* firefox */
+                        image-rendering: -o-crisp-edges; /* opera */
+                        -ms-interpolation-mode: nearest-neighbor; /* ie */
+                    }
+                </style>
+            
+    <script src="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ardhi/Leaflet.MousePosition/src/L.Control.MousePosition.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-minimap/3.6.1/Control.MiniMap.css"/>
+</head>
+<body>
+    
+    <div id="tool-bar"><select id="sel-huc">
+	<option value="" selected disabled hidden>Choose HUC Basin</option>
+	</select> </div>
+    <div class="folium-map" id="main-map" ></div>
+</body>
+<script>
+ var main_map = L.map(
+     "main-map",
+     {
+         center: [38.88157503235638, -83.55287118752037],
+         crs: L.CRS.EPSG3857,
+         zoom: 10,
+         zoomControl: true,
+         preferCanvas: false,
+     }
+ );
+
+ L.tileLayer(
+     "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     {"attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors", "detectRetina": false, "maxNativeZoom": 19, "maxZoom": 19, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+ ).addTo(main_map);
+ 
+ var osm_layer = L.tileLayer(
+     "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     {"attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors", "detectRetina": false, "maxNativeZoom": 19, "maxZoom": 19, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+ );
+ 
+ 
+ osm_layer.addTo(main_map);
+
+ /* just in case we did HUC levels in different layers later */
+ var fg_hucs = L.featureGroup(
+     {}
+ );
+
+ L.esri.dynamicMapLayer({
+     url: 'https://hydro.nationalmap.gov/arcgis/rest/services/wbd/MapServer',
+     show: false,
+ })
+  .addTo(fg_hucs);
+ 
+ 
+ var mouse_pos = new L.Control.MousePosition(
+     {"emptyString": "Unavailable", "lngFirst": false, "numDigits": 5, "position": "bottomright", "prefix": "", "separator": " : "}
+ );
+ mouse_pos.options["latFormatter"] =
+     undefined;
+ mouse_pos.options["lngFormatter"] =
+     undefined;
+ main_map.addControl(mouse_pos);
+ 
+ 
+ var mini_tile = L.tileLayer(
+     "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     {"attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors", "detectRetina": false, "maxNativeZoom": 19, "maxZoom": 19, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+ );
+ var mini_map = new L.Control.MiniMap(
+     mini_tile,
+     {"autoToggleDisplay": false, "centerFixed": false, "collapsedHeight": 25, "collapsedWidth": 25, "height": 150, "minimized": false, "position": "bottomleft", "toggleDisplay": false, "width": 150, "zoomAnimation": false, "zoomLevelOffset": -5}
+ );
+ main_map.addControl(mini_map);
+ 
+ 
+ var layer_control_34284a3afe2b3c995dc1cf9069cab414_layers = {
+     base_layers : {
+         "OpenStreetMap Only" : osm_layer,
+     },
+     overlays :  {
+         "HUC Borders" : fg_hucs,
+     },
+ };
+ let layer_control = L.control.layers(
+     layer_control_34284a3afe2b3c995dc1cf9069cab414_layers.base_layers,
+     layer_control_34284a3afe2b3c995dc1cf9069cab414_layers.overlays,
+     {"autoZIndex": true, "collapsed": false, "position": "topright"}
+ ).addTo(main_map);
+
+ 
+ var tabledata;
+ var select = document.getElementById('sel-huc');
+
+ const params = new Proxy(new URLSearchParams(window.location.search), {
+     get: (searchParams, prop) => searchParams.get(prop),
+ });
+ var curr_huc = params.huc
+ var curr_file = params.file
+ 
+ fetch("/netcdfs-index.json").then(res => res.json()).then(json => {
+     tabledata = json.data;
+     var hucs = [];
+     for (var i=0; i < json.recordsTotal; i++) {
+	 if (!hucs.includes(tabledata[i].huc)){
+	     hucs.push(tabledata[i].huc);
+	     var opt = document.createElement('option');
+	     opt.value = tabledata[i].huc;
+	     opt.innerHTML = tabledata[i].huc + " — " + tabledata[i].huc_name;
+	     select.appendChild(opt);
+	 }
+     }
+     select.value = curr_huc
+     load_clusters()
+ })
+
+ var layers = {}
+ 
+ function load_clusters() {
+     curr_huc = select.value;
+     for (var l in layers) {
+	 layer_control.removeLayer(layers[l])
+	 main_map.removeLayer(layers[l])
+     }
+     var main_map_bounds = [[35.3125, -89.3125], [42.5, -77.8125]]
+     var uniform_lyr;
+     for (var i=0; i < tabledata.length; i++) {
+	 if (tabledata[i].huc == curr_huc && !(tabledata[i].thumbnail in layers)){
+	     var clus_lyr = L.imageOverlay(
+		 "/thumbnails/" + tabledata[i].thumbnail,
+		 tabledata[i].bounds,
+		 {"opacity": 1.0, "zindex": 1}
+	     );
+	     layers[tabledata[i].thumbnail] = clus_lyr;
+	     var lyr_name = "Uniform"
+	     if (tabledata[i].thumbnail.includes("uniform")){
+		 uniform_lyr = clus_lyr;
+	     } else{
+		 var split_data = tabledata[i].thumbnail.split("_", 3)
+		 lyr_name = split_data[1] + "_" + split_data[2]
+	     }
+	     if (curr_file == tabledata[i].thumbnail) {
+		 clus_lyr.addTo(main_map)
+	     }
+	     layer_control.addBaseLayer(clus_lyr, lyr_name)
+	     main_map_bounds = tabledata[i].bounds
+	 }
+     }
+     if (curr_file == undefined){
+	 uniform_lyr.addTo(main_map)
+     } else{
+	 curr_file = undefined
+     }
+     /* since there isn't a way to change the file parameter when the
+     layers are changed, let's remove it and only keep the HUC */
+     window.history.replaceState({}, document.title, window.location.pathname + "?huc=" + curr_huc)
+     main_map.fitBounds(
+	 main_map_bounds,
+	 {}
+     );
+ }
+
+ if (window.location.hash.substring(1) == "HUC"){
+     fg_hucs.addTo(main_map);
+ }
+ select.addEventListener("change", load_clusters)
+</script>
+</html>

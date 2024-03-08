@@ -36,7 +36,7 @@ def generate_mean_netcdf(h: HUC, series="ams", ndays=1):
 
 
 def generate_uniform_netcdf(h: HUC):
-    wt = h.weights.weights * 100
+    wt = h.weights.weights * h.weights.weights.count() * 100
     wt["lat"] = 0 + wt.lat
     if wt.lon.min() > 180:
         # GIS compatible range

@@ -199,6 +199,24 @@ The output of the command can be piped, only the reporting texts from the main f
 
 If you need to print any debugging information that's not supposed to goto the report, print it in the `stderr`.
 
+# Server
+The locus server files are in server directory. The server data directory structure are as follows:
+
+    download/
+    thumbnails/
+    map.html
+    netcdfs-index.html
+    netcdfs-index.json
+
+The generated `netCDF` files are in `download` directory, one file per grid value (cluster), and the netcdf files are converted into PNG images and saved in `thumbnails`. Following command can be used to convert the files in parallel using [`gnu parallel`](https://www.gnu.org/software/parallel/) and [`gdal`](https://gdal.org/):
+
+    ls -1 download/*.nc | parallel --silent --bar echo 'gdaldem color-relief -alpha netcdf:{1} ../precip-color.txt thumbnails/{1.}.png'
+
+As for the files:
+- map.html: Interactive map showing the HUC boundaries and the clusters
+- netcdfs-index.html: interactive page with tabulated data for the clusters
+- netcdfs-index.json: tablulated data for the clusters in computer understandable languages for scripts
+
 # Note
 
 ## Livneh Data Range

@@ -130,6 +130,9 @@ def subbasins_plot_clusters(huc: HUC, args):
 
 
 def generate_netcdfs(huc: HUC, args):
+    if huc.weights is None or huc.weights.weights.count() == 0:
+        print("No weights")
+        return
     ncgen.generate_uniform_netcdf(huc)
     ndays = args.num_days
     for series in args.series.split("+"):

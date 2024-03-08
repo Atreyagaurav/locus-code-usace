@@ -1,0 +1,75 @@
+<html>
+    <head><title>Index of Cluster Weights</title></head>
+    <body>
+	<p>
+	    <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset">HUC stands for Hydrologic Unit Code</a>. You can goto our <a href="/map.html#HUC">interactive map</a> to see the HUC borders and find out the corresponding code at the location of interest.
+
+	    You can also search  online for how to find HUC for your streams of interest, <a href="https://www.usgs.gov/faqs/how-can-i-find-huc-hydrologic-unit-code-stream-how-can-i-find-namelocation-stream-using-huc"> example link </a>.
+	</p>
+	<p> The results indexed here are available for most of the HUC2 and HUC4 Basins. Some basins were not run successfully, please reach out to us, if you don't have it here. For any other HUC levels, feel free to run the code yourself to generate the clusters and the map. The code used to generate these files are in <a href="#">TODO: Placeholder for the final repo</a>.
+	</p>
+	<p>
+	    The filename convention is: <code>HucName_seriesNd_cluster_prec-100mm.nc</code><br />
+	    Where <code>HucName</code> is the name for the HUC Basin without any spaces, <code>series</code> can be <code>ams</code> for Annual Maximum Series, and <code>pds</code> for Partial Duration Series. N is the number of days for the event (currently only 1 day event is available). And the cluster can be <code>average</code> for the average of all events, and <code>cluster-N</code> for N<sup>th</sup> cluster. Each basin has a file <code>HucName_uniform_prec-100mm.nc</code> which is just a uniform precipitation over the basin, for baseline comparision.
+	</p>
+	    <table id="tab-netcdfs" class="display" style="width:100%">
+            <thead>
+		<tr>
+		    <th>Image</th>
+		    <th>File Name</th>
+		    <th>Basin Name</th>
+		    <th>HUC</th>
+		    <th>Series</th>
+		    <th>Duration</th>
+		    <th>Cluster</th>
+		    <th>Filesize (kB)</th>
+		</tr>
+            </thead>
+            <tfoot>
+		<tr>
+		    <th>Image</th>
+		    <th>File Name</th>
+		    <th>Basin Name</th>
+		    <th>HUC</th>
+		    <th>Series</th>
+		    <th>Duration</th>
+		    <th>Cluster</th>
+		    <th>Filesize (kB)</th>
+		</tr>
+            </tfoot>
+	</table><link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.css" />
+	<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+	<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.js"></script>
+	<script type="text/javascript" class="init">	 
+	 $(document).ready( function () {
+	     $('#tab-netcdfs').DataTable({
+		 "ajax": '/netcdfs-index.json',
+		 columns: [
+		     {data: 'thumbnail'}, /* linked to /download/thumbnail */
+		     {data: 'filename'}, /* linked to /download/filename */
+		     {data: 'huc_name'}, /* linked to /map/huc_name.html */
+		     {data: 'huc'},
+		     {data: 'series'},
+		     {data: 'duration'},
+		     {data: 'cluster'},
+		     {data: 'filesize'},
+		 ],
+		 columnDefs: [
+		     {
+			 render: (data, type, row) => '<img src="/thumbnails/' + data + '\" height="60">',
+			 targets: 0
+		     },
+		     {
+			 render: (data, type, row) => '<a href="/download/' + data + '\">' + data + '</a>',
+			 targets: 1
+		     },
+		     {
+			 render: (data, type, row) => '<a href="/map.html?huc=' + row.huc + '&file=' + row.thumbnail +'\" target=\"_blank\">' + data + '</a>',
+			 targets: 2
+		     },
+		 ]
+	     });
+	 });
+	</script>
+    </body>
+</html>
