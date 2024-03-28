@@ -2,6 +2,10 @@
 
 Identifies spatial patterns in extreme precipitation events.
 
+[Interactive Map](http://ronin-river.github.io/locus/map.html)
+
+[Interactive Data Table](http://ronin-river.github.io/locus/netcdfs-index.html)
+
 
 ## Preparing Datasets
 ### Precipitation Data
