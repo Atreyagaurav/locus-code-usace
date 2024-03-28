@@ -4,6 +4,58 @@ import pandas as pd
 import xarray
 
 
+def set_attrs(obj, **kwargs):
+    for k, v in kwargs.items():
+        obj[k] = v
+
+# https://docs.unidata.ucar.edu/nug/current/best_practices.html
+# http://cfconventions.org/
+# http://cfconventions.org/Data/cf-conventions/cf-conventions-1.11/cf-conventions.html
+def add_metadata(dat: xarray.Dataset, name, **kwargs):
+    # long name for variables
+    # order: "date or time" (T), "height or depth" (Z), "latitude" (Y), or "longitude" (X)
+    set_attrs(
+        dat.attrs,
+        Conventions = "CF-1.11",
+        # name will have HUC and cluster-N / mean / uniform
+        name = name,
+        title = f"Locus: Spatial Distribution of Extreme Precipitation",
+        projection = "Geographic",
+        institution = "University of Cincinnati ...",
+        source = "locus-v0.1",
+        history = "Created by clustering the data from Livneh et al., 2013 for each HUC basins after filtering only the extreme precipitations",
+        references = "TODO (unpublished)",
+        comment = "TODO (Link to github repo, probably)",
+    )
+
+    # axis not required when we have standard name
+    # dat.coords['lat'].attrs["axis"] = "Y"
+    # dat.coords['lon'].attrs["axis"] = "X"
+    set_attrs(
+        dat.coords['lat'].attrs,
+        standard_name = "grid_latitude",
+        units = "degrees_north",
+    )
+    set_attrs(
+        dat.coords['lon'].attrs,
+        standard_name = "grid_longitude",
+        units = "degrees_east",
+    )
+    # unit for precipitation_flux is kg m^-2 so it's not true
+    # dat.variables['weights'].attrs["standard_name"] = "precipitation_flux"
+    set_attrs(
+        dat.variables['weights'].attrs,
+        long_name = "precipitation weights",
+        description = (
+            "amount of precipitation that'd fall at the particular" +
+            " grid out of total 100 mm precipitation throughout the basin"
+        ),
+        units = "mm/day",
+    )
+    # overwriting any attributes for each variables
+    set_attrs(dat.attrs, **kwargs)
+
+
 def generate_cluster_netcdfs(h: HUC, series="ams", ndays=1):
     wt = cluster.cluster_weights(h, series, ndays)
     # to remove the "actual_range" attr

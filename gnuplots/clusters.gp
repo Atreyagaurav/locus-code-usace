@@ -12,6 +12,6 @@ set y2tics
 set y2label "Basin Averaged Precipitation (mm)"
 
 
-plot "data/output/".HUC."/clusters-summary-ams_1day.csv"\
+plot "../data/output/".HUC."/clusters-summary-ams_1day.csv"\
      using ($0-.2):"count":xtic(1) with boxes title "Count",\
      "" using ($0+.2):"precip" with boxes title "Basin Precip" axes x1y2
