@@ -9,6 +9,7 @@ from datetime import datetime
 import pandas as pd
 import geopandas as gpd
 
+
 # https://prd-tnm.s3.amazonaws.com/StagedProducts/Hydrography/WBD/National/GPKG/WBD_National_GPKG.zip
 # fiona.listlayers("./data/WBD_National_GPKG.gpkg")
 
@@ -189,7 +190,8 @@ class HUC:
         """
         if self.weights is None:
             self.load_weights()
-        year_julian = [(d.year, dates[0].timetuple().tm_yday) for d in dates]
+        # that was a pretty big bug lol
+        year_julian = [(d.year, d.timetuple().tm_yday) for d in dates]
         bbox = self.buffered_bbox()
 
         def get_df(yr, jul):
@@ -231,9 +233,10 @@ class HUC:
 
         def get_df(year):
             netCDF = xarray.open_dataset(LivnehData.input_file(year))
-            weighted = (netCDF.prec * self.weights.weights).sum(dim=["lat", "lon"])
+            prec = netCDF.sel(lat=self.weights.lat, lon = self.weights.lon).prec
+            weighted = (prec * self.weights.weights).mean(dim=["lat", "lon"])
             weighted.name = "prec"
-            return weighted.to_dataframe()
+            return weighted.to_dataframe().loc[:, ["prec"]]
 
         return pd.concat(map(get_df, LivnehData.YEARS))
 
@@ -263,56 +266,21 @@ class HUC:
 
         """
         netCDF = xarray.open_dataset(next(LivnehData.all_input_files()))
-        bbox = self.buffered_bbox()
-        lats = list(
-            filter(
-                lambda il: il[1] > bbox[1] and il[1] < bbox[3],
-                enumerate(netCDF.lat.to_numpy()),
-            )
-        )
-        lons = list(
-            filter(
-                lambda il: il[1] > bbox[0] and il[1] < bbox[2],
-                enumerate(netCDF.lon.to_numpy() - 360),
-            )
-        )
-        latlon = pd.Series(itertools.product(lats, lons))
-        shift = LivnehData.RESOLUTION / 2
-
-        geometry = [
-            shapely.ops.clip_by_rect(self.geometry,
-                                     lon - shift, lat - shift,
-                                     lon + shift, lat + shift)
-            for ((_, lat), (_, lon)) in latlon
-        ]
-        clipped = gpd.GeoDataFrame(
-            index=latlon, geometry=geometry, crs=HUC.SOURCE_CRS)
-        clipped = clipped.loc[clipped.geometry.map(lambda g: not g.is_empty)].to_crs(
-            HUC.AREA_CRS
-        )
-        area: pd.Series = clipped.geometry.map(lambda g: g.area / 1_000_000)
-        template = netCDF.prec.isel(time=0).drop_vars("time")
-        self._set_and_save_weights(area, template=template)
-
-    def _set_and_save_weights(self, area: pd.Series, /, template):
-        areas = xarray.zeros_like(template)
-        ids = xarray.zeros_like(template, dtype=int)
-        i = 1
-        for ((lat_ind, _), (lon_ind, _)), a in area.items():
-            areas[(lat_ind, lon_ind)] = a
-            ids[(lat_ind, lon_ind)] = i
-            i += 1
-        print(f"Number of Grid Cells in Basin: {i-1}")
-        weights = xarray.Dataset()
-        weights["ids"] = ids
-        total_area = self.geometry_as_geodataframe().to_crs(
-                HUC.AREA_CRS).loc[0, "geometry"].area / 1_000_000
-        weights["weights"] = areas / total_area
-        print(f"Sum of weights: {float(weights.weights.sum()): .3f}")
-        self.weights = weights.where(weights.ids > 0, drop=True)
-        self.weights.to_netcdf(self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
-        self.weights.to_dataframe().dropna().to_csv(
+        # this methods cuts the weights calculation time from
+        # 1.5-2 minutes to a second, and it's roughly the same values
+        import regionmask
+        region = regionmask.Regions([self.geometry])
+        mask = region.mask_3D_frac_approx(netCDF.lon, netCDF.lat)
+        self.weights = xarray.Dataset()
+        self.weights["weights"] = mask.where(mask>0, drop=True).isel(region=0).drop_vars(["abbrevs", "names", "region"])
+        self.weights["weights"] *= self.weights["weights"].count() / self.weights["weights"].sum()
+        print(f"Grid Count: {float(self.weights.weights.count())}")
+        ids = self.weights.to_dataframe().dropna()
+        ids.loc[:, "ids"] = [i+1 for i in range(len(ids.index))]
+        ids.to_csv(
             self.data_path("ids.csv")
         )
+        self.weights["ids"] = ids.ids.to_xarray()
+        self.weights.to_netcdf(self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
         print(":", self.data_path(HUC.IDS_AND_WEIGHTS_FILENAME))
         print(":", self.data_path("ids.csv"))

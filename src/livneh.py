@@ -12,6 +12,10 @@ class LivnehData:
         return cls.input_file_path(f"prec.{year}.nc")
 
     @classmethod
+    def input_files_glob(cls) -> str:
+        return cls.input_file_path("prec.*.nc")
+
+    @classmethod
     def input_file_path(cls, filename: str) -> str:
         return os.path.join(LivnehData.DATA_ROOT, filename)
 

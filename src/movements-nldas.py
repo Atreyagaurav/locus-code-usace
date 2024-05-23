@@ -3,68 +3,70 @@ import pandas as pd
 import numpy as np
 import lmfit
 import shapely
+import regionmask
+import matplotlib.pyplot as plt
 
 from src.huc import HUC
 
 h = HUC("02070002")
+h = HUC("05")
+
+data = xarray.load_dataset(f"data/nldas/{h.huc_code}/nldas-precip.nc")
+region = regionmask.Regions([h.geometry])
+mask = region.mask_3D_frac_approx(data.lon, data.lat)
+weights = mask.where(mask>0, drop=True).isel(region=0).drop_vars(["abbrevs", "names", "region"])
+
+clusters = xarray.load_dataset(h.data_path("clusters-weights_pds_1day.nc"))
 
 
-def get_center(df):
-    lat_lon = (len(df.index.levels[0]), len(df.index.levels[1]))
-    grid = df.prec.to_numpy().reshape(lat_lon)
-    basin = df.basin.to_numpy().reshape(lat_lon)
-    # grid2 = gaussian_filter(grid, sigma=2, order=0)
-    masked = np.multiply(grid, basin)
-    center = np.where(masked == masked.max())
-    x = df.index.levels[1][center[1][0]]
-    y = df.index.levels[0][center[0][0]]
+matches = dict()
 
-    model = lmfit.models.Gaussian2dModel()
-    all_x = [x for _, x in df.index]
-    all_y = [y for y, _ in df.index]
-    all_z = masked.flatten()
-    params = model.guess(all_z, all_x, all_y)
-    return (params.get("centerx").value, params.get("centery").value)
+for cl in clusters.cluster:
+    cl1 = clusters.weights.sel(cluster=cl).drop_vars("cluster")
+    cl1["lon"] = cl1.lon - 360
+
+    x = cl1.sel(lat=data.lat, lon=data.lon, method="nearest")
+    x["lat"] = data.lat
+    x["lon"] = data.lon
+
+    diff = ((data.Rainf - x)**2).sum(dim=["lat", "lon"])
+    
+    matches[str(cl.values)] = diff.time.to_series().iloc[int(diff.argmin())]
 
 
-data = xarray.load_dataset(h.data_path("nldas.nc"))
-data = data.rename_vars({"APCP": "prec"})
-
-mask = xarray.DataArray(coords=data.isel(time=0).drop_vars("time").coords).to_dataframe(
-    name="basin"
+plt.subplots_adjust(
+    **{k: 0.06 for k in ["left", "bottom"]},
+    **{k: 0.94 for k in ["top", "right"]},
+    **{k: 0.2 for k in ["wspace", "hspace"]},
+)
+fig, axes = plt.subplots(
+    nrows=1,
+    ncols=len(matches),
+    figsize=(5 * len(matches), 6),
+    sharex=True,
+    sharey=True,
+    squeeze=True
 )
 
-for ind in mask.index:
-    pt = shapely.Point(*ind)
-    mask.loc[ind] = h.geometry.contains(pt)
-mask.basin = mask.basin.astype(int)
 
-nyears = len(data.time) // 24
+for i, cl in enumerate(matches):
+    x = data.Rainf.sel(time=matches[cl]).where(weights>0).plot(ax=axes[i])
 
-clusters = (
-    pd.read_csv(h.data_path("clusters-ams_1day.csv"), index_col="end_date")
-    .cluster.map(lambda c: int(c.split("-")[1]))
-    .to_dict()
-)
+plt.suptitle(f"Closest Matched Patterns in NLDAS2")
+plt.savefig(h.image_path(f"{series}_{ndays}dy_nldas.png"))
+print(":", h.image_path(f"{series}_{ndays}dy_nldas.png"))
 
-averaged = {}
-for year in range(nyears):
-    centers = pd.DataFrame(index=range(24), columns=["x", "y"])
-    centers.index.name = "hour"
-    for hour in range(24):
-        ydata = data.isel(time=24 * year + hour)
-        time = str(ydata.time.to_numpy()).split(":", maxsplit=1)[0]
-        day, time = time.split("T")
-        grid = ydata.drop_vars("time").to_dataframe()
-        centers.loc[hour] = list(get_center(grid.join(mask)))
-    centers.loc[:, "dx"] = centers.x.diff().shift(-1)
-    centers.loc[:, "dy"] = centers.y.diff().shift(-1)
-    centers.loc[:, "cluster"] = clusters[day]
-    averaged[day] = centers.mean()
-    averaged[day].loc[["dx", "dy"]] = centers.sum().loc[["dx", "dy"]]
-    centers.dropna().to_csv(h.data_path(f"nldas/{day}.csv"))
+from datetime import timedelta
 
-average_df = pd.DataFrame(averaged).T
-average_df.index.name = "date"
-average_df.to_csv(h.data_path("nldas-daily.csv"))
-average_df.groupby("cluster").mean().to_csv(h.data_path("nldas-mean.csv"))
+for cl in matches:
+    start = matches[cl] - timedelta(hours=12)
+    end = matches[cl] + timedelta(hours=12)
+    ind = (data.time > start) & (data.time < end)
+    times = data.time.to_series().loc[ind.values]
+    l = data.Rainf.sel(time=times.to_numpy()).where(weights>0)
+    for t in times:
+        data.Rainf.sel(time=t).where(weights>0).drop_vars("time").plot(
+            vmin=float(l.min()), vmax=float(l.max()),
+        )
+        plt.savefig(f"/tmp/{t.isoformat()}")
+        plt.close()

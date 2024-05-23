@@ -73,3 +73,40 @@ Note: The new ones show a few more points which was my mistake originally as I d
 #+name: fig:clus-new
 #+caption: Cluster characteristics from new algorithm
 [[./manual-images/clusters-ohio-new.png]]
+
+** Clustering
+|                         |   ohio-region |        trinity | north-branch-potomac |
+| huc                     |             5 |           1203 |              2070002 |
+|-------------------------+---------------+----------------+----------------------|
+| ams_1day_avg_silhouette |       0.12818 |        0.22129 |              0.16736 |
+| ams_1day_cluster_counts | 32 21 21 16 8 |     45 23 21 9 |          38 26 22 12 |
+| ams_1day_conversed      |          True |           True |                 True |
+| ams_1day_lta_silhouette |             1 |              2 |                    3 |
+| ams_1day_neg_silhouette |             0 |              0 |                    0 |
+| ams_1day_num_cluster    |             5 |              4 |                    4 |
+|-------------------------+---------------+----------------+----------------------|
+| pds_1day_avg_silhouette |       0.14791 |        0.15337 |              0.14963 |
+| pds_1day_cluster_counts | 120 117 99 96 | 192 140 102 68 |     167 100 91 74 65 |
+| pds_1day_conversed      |          True |           True |                 True |
+| pds_1day_lta_silhouette |             2 |              3 |                    3 |
+| pds_1day_neg_silhouette |             0 |              0 |                    0 |
+| pds_1day_num_cluster    |             4 |              4 |                    5 |
+
+
+
+[[./images/05/ams_1dy.png]]
+[[./images/05/pds_1dy.png]]
+[[./images/05/ams_1day_kmeans.png]]
+[[./images/05/pds_1day_kmeans.png]]
+
+[[./images/1203/ams_1dy.png]]
+[[./images/1203/pds_1dy.png]]
+[[./images/1203/ams_1day_kmeans.png]]
+[[./images/1203/pds_1day_kmeans.png]]
+
+
+[[./images/02070002/ams_1dy.png]]
+[[./images/02070002/pds_1dy.png]]
+[[./images/02070002/ams_1day_kmeans.png]]
+[[./images/02070002/pds_1day_kmeans.png]]
+

@@ -28,8 +28,8 @@ class CliAction(Enum):
     AMS_AND_PDS = 2
     FIND_CLUSTERS = 3
     PLOT_CLUSTERS = 4
-    SUBBASINS_PLOT_CLUSTERS = 5
-    MAP_WEIGHTS = 6
+    # SUBBASINS_PLOT_CLUSTERS = 5
+    # MAP_WEIGHTS = 6
     GENERATE_NETCDFS = 7
     BATCH_PROCESS = -1
 
@@ -66,8 +66,8 @@ def plot_clusters(huc: HUC, args):
     for series in args.series.split("+"):
         cluster_means = cluster.cluster_weights(huc, series, ndays).prec
         nclusters = len(cluster_means.cluster)
-        maximum = math.ceil(cluster_means.max() / 10) * 10
-        minimum = math.floor(cluster_means.min() / 10) * 10
+        maximum = math.ceil(cluster_means.max() * 10) / 10
+        minimum = math.floor(cluster_means.min() * 10) / 10
 
         plt.subplots_adjust(
             **{k: 0.06 for k in ["left", "bottom"]},

@@ -1,0 +1,14 @@
+ams_1day_avg_silhouette=0.21684368456569497
+ams_1day_cluster_counts=44 23 20 11
+ams_1day_converged=True
+ams_1day_conversed=True
+ams_1day_lta_silhouette=3
+ams_1day_neg_silhouette=0
+ams_1day_num_cluster=4
+pds_1day_avg_silhouette=0.15337003025604298
+pds_1day_cluster_counts=192 140 102 68
+pds_1day_converged=True
+pds_1day_conversed=True
+pds_1day_lta_silhouette=3
+pds_1day_neg_silhouette=0
+pds_1day_num_cluster=4

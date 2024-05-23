@@ -88,7 +88,7 @@ def generate_cluster_netcdfs(h: HUC, series="ams", ndays=1):
     precip = h.load_timeseries().prec
     for cl in range(len(wt.cluster)):
         c1 = wt.weights[:, :, cl].drop_vars("cluster")
-        c1 = (c1 * c1.count() * 100).fillna(0).to_dataset()
+        c1 = (c1 * 100).fillna(0).to_dataset()
 
         c1_dates = pd.to_datetime(pd.Series(dates[wt.cluster[cl].item()])) - pd.to_datetime("1915-1-1")
         c1_dates.index += 1
@@ -119,7 +119,7 @@ def generate_mean_netcdf(h: HUC, series="ams", ndays=1):
     average = (wt.weights * cweights).sum(["cluster"])
     wt["lat"] = 0 + wt.lat
     average_ds = (
-        average * average.where(average > 0).count() * 100
+        average * 100
     ).to_dataset(name="weights")
 
     dates = pd.read_csv(
@@ -142,7 +142,7 @@ def generate_mean_netcdf(h: HUC, series="ams", ndays=1):
 
 
 def generate_uniform_netcdf(h: HUC):
-    wt = (h.weights.weights * h.weights.weights.count() * 100).to_dataset(name="weights")
+    wt = (h.weights.weights / h.weights.weights.mean() * 100).to_dataset(name="weights")
     wt["lat"] = 0 + wt.lat
     if wt.lon.min() > 180:
         # GIS compatible range

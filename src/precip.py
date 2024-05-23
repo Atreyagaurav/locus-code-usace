@@ -5,8 +5,19 @@ from datetime import timedelta
 
 def calculate_ams_series(huc: HUC, ndays: int) -> pd.DataFrame:
     basin = huc.rolling_timeseries(ndays)
-    year = pd.DatetimeIndex(basin.index).year
-    series = basin[basin == basin.groupby(year).transform(max)].dropna()
+    # find the dry month for the water year cutoff
+    months = pd.DatetimeIndex(basin.index).month
+    m = basin.groupby(months).mean()
+    cut_month = m.loc[m.prec==m.prec.min()].index[0]
+    
+    cut_days = [
+        f"{y}-{cut_month:02d}-01" for y in
+        pd.DatetimeIndex(basin.index).year.unique()
+    ]
+    blocks = basin.index.map(lambda d: d in cut_days).to_series().cumsum().to_list()
+    series = basin[basin == basin.groupby(blocks).transform(max)].dropna()
+    # year = pd.DatetimeIndex(basin.index).year
+    # series = basin[basin == basin.groupby(year).transform(max)].dropna()
     ams_series = (
         pd.DataFrame({"p_mm": series.prec, "end_date": series.index})
         .reset_index()
@@ -34,7 +45,7 @@ def calculate_pds_series(huc: HUC, ndays: int, threshold: float) -> pd.DataFrame
         .drop(columns=["time"])
     )
     pds_series.loc[:, "duration"] = ndays
-    pds_series.to_csv(huc.data_path(f"pds_{ndays}dy_series.csv"))
+    pds_series.to_csv(huc.data_path(f"pds_{ndays}dy_series.csv"), index=None)
     print(":", huc.data_path(f"pds_{ndays}dy_series.csv"))
     return pds_series
 
